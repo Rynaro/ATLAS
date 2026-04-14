@@ -1,3 +1,13 @@
+---
+name: atlas-synthesize
+description: Phase S (Synthesize) — emit the scout-report.md artifact that downstream agents (SPECTRA, APIVR-Δ, human) consume. Use after Phase A (Abstract) fold is validated. Hard cap 3000 tokens; every factual clause cited with FINDING-XXX; every recommended action carries a handoff label.
+when_to_use: After fold summary validates; when DECISION_TARGET has an answer or its gaps are recorded. Final phase of an ATLAS mission.
+allowed-tools: memex_read view_file
+methodology: ATLAS
+methodology_version: "1.0"
+phase: S
+---
+
 # SKILL: Synthesize — scout report emission (Phase S)
 
 **Load when:** fold summary is validated and all `DECISION_TARGET` sub-questions

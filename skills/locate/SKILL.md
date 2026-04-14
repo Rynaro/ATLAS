@@ -1,3 +1,13 @@
+---
+name: atlas-locate
+description: Phase L (Locate) — bounded probes and scatter subagents to answer DECISION_TARGET sub-questions. Use after Phase T (map.md) is complete. Descends a symbol → graph → lexical → windowed-read → test-dry-run ladder; emits FINDING-XXX records with evidence anchors and confidence tiers. Hot phase (≤60% of mission budget).
+when_to_use: After map.md is complete and sub-questions remain. Trigger phrases — "find where X happens", "trace Y", "who writes to Z", "who calls this", "what implements this".
+allowed-tools: search_symbol graph_query search_text view_file test_dry_run memex_read
+methodology: ATLAS
+methodology_version: "1.0"
+phase: L
+---
+
 # SKILL: Locate — bounded probes & scatter subagents (Phase L)
 
 **Load when:** `map.md` is complete and sub-questions exist against `DECISION_TARGET`.

@@ -1,3 +1,13 @@
+---
+name: atlas-abstract
+description: Phase A (Abstract) — AgentFold compression of the Locate trajectory into a ≤2000-token working-memory summary plus a Memex excerpt store. Use after findings.md is complete and before synthesis. Runs in a clean-context subagent to prevent trajectory contamination. Mechanically validates that every FINDING-XXX, GAP-XXX, and ESCALATION_TRIGGER is preserved.
+when_to_use: After findings.md is complete; before Phase S (Synthesize). Triggered automatically at phase boundary, or at ≥60% context-used telemetry threshold.
+allowed-tools: memex_read view_file
+methodology: ATLAS
+methodology_version: "1.0"
+phase: A
+---
+
 # SKILL: Abstract — AgentFold & Memex (Phase A)
 
 **Load when:** `findings.md` is complete and you are about to Synthesize.
