@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# Claude Code local config (credentials / local overrides — never commit)
+.claude/settings.local.json
