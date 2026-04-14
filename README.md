@@ -66,10 +66,15 @@ See `ATLAS.md` for the full specification.
 ```
 atlas/
 ├── README.md                   # this file
+├── INSTALL.md                  # cross-platform installation guide
+├── AGENTS.md                   # open-standard rule set (Copilot/Cursor/OpenCode)
 ├── ATLAS.md                    # methodology specification (authoritative)
 ├── agent.md                    # always-loaded agent profile (≤1000 tokens)
 │
-├── skills/                     # progressive-disclosure skills
+├── .github/
+│   └── copilot-instructions.md # GitHub Copilot primary entry point
+│
+├── skills/                     # progressive-disclosure skills (YAML frontmatter)
 │   ├── traverse/SKILL.md       # Phase T — structural mapping
 │   ├── locate/SKILL.md         # Phase L — bounded probes, scatter
 │   ├── abstract/SKILL.md       # Phase A — AgentFold + Memex
@@ -114,19 +119,44 @@ for the end-to-end installation playbook.
 
 ---
 
-## Quick start (conceptual)
+## Install
 
-1. **Mount ATLAS as an agent** in your harness of choice. The agent profile
-   (`agent.md`) is ≤1000 tokens and should be in the always-loaded slot.
-2. **Wire the ACI.** Install [atlas-aci](https://github.com/Rynaro/atlas-aci)
-   as your MCP server, or adapt `tools/bounded-aci-spec.md` to your harness's
-   native tool surface.
-3. **Index the repo.** Run `atlas-aci index --repo <path>` once (or after major
-   refactors) to build the tree-sitter + SQLite code graph.
-4. **Provide a Memex root.** Pass `--memex-root` to the server. A
-   hashed-file directory is the zero-dependency default.
-5. **Run the canaries** in `evals/canary-missions.md` to verify your
-   implementation reaches ≥80% pass rate before going live.
+Full cross-platform installation guide: **[INSTALL.md](INSTALL.md)**. It
+covers Claude Code, Cursor, GitHub Copilot, and OpenCode, plus the
+optional `atlas-aci` MCP server for mechanical enforcement.
+
+Three-line quickstart (from inside the repo you want ATLAS to explore):
+
+```bash
+# 1. Vendor ATLAS into the target repo
+git subtree add --prefix=.atlas https://github.com/Rynaro/atlas.git main --squash
+
+# 2. Wire the always-on profile (Cursor / Copilot / OpenCode)
+ln -sf .atlas/AGENTS.md AGENTS.md
+
+# 3. Claude Code only — wire skills and subagent
+mkdir -p .claude/skills .claude/agents && \
+  for p in traverse locate abstract synthesize; do \
+    ln -sf ../../.atlas/skills/$p .claude/skills/atlas-$p; done && \
+  cp .atlas/agent.md .claude/agents/atlas.md
+```
+
+Then run any canary mission from `evals/canary-missions.md` to verify your
+install reaches the ≥80% pass target.
+
+## Conceptual flow (for implementers)
+
+1. **Mount ATLAS as an agent** in your harness. `agent.md` is ≤1000 tokens
+   and belongs in the always-loaded slot.
+2. **Wire the ACI.** Either install [atlas-aci](https://github.com/Rynaro/atlas-aci)
+   as an MCP server, or adapt `tools/bounded-aci-spec.md` to your host's
+   native read tools.
+3. **Index the repo** with `atlas-aci index --repo <path>` (once; re-run
+   after major refactors).
+4. **Provide a Memex root** via `--memex-root`. A hashed-file directory is
+   the zero-dependency default.
+5. **Run the canaries** in `evals/canary-missions.md` to verify ≥80% pass
+   before going live.
 
 ---
 
