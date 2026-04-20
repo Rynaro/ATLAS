@@ -7,6 +7,34 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — EIIS-1.0 conformance
+
+### Added
+
+- **install.sh** — idempotent installer conforming to EIIS v1.0 §2 interface
+  contract: all required flags (`--target`, `--hosts`, `--force`, `--dry-run`,
+  `--non-interactive`, `--manifest-only`, `--version`), auto host detection,
+  consumer dispatch file creation, manifest emission, token measurement, and
+  smoke-test banner.
+- **schemas/install.manifest.v1.json** — JSON Schema draft 2020-12 for the
+  `install.manifest.json` artifact emitted by `install.sh`.
+- **hosts/claude-code.md** — per-host wiring quick-reference for Claude Code.
+- **hosts/copilot.md** — per-host wiring quick-reference for GitHub Copilot.
+- **hosts/cursor.md** — per-host wiring quick-reference for Cursor.
+- **hosts/opencode.md** — per-host wiring quick-reference for OpenCode.
+- **DESIGN-RATIONALE.md** — research-to-decision mapping for all eight
+  architectural invariants (I-1 through I-8) plus the progressive-disclosure
+  and three-strike-halt design choices.
+
+### Changed
+
+- **AGENTS.md** — prepended EIIS §5 YAML frontmatter block (`name`, `version`,
+  `methodology`, `methodology_version`, `role`, `handoffs`). No body changes.
+- **CLAUDE.md** — appended `## Consumer project usage` section with EIIS
+  load-order pointer and quick-install command. No changes to existing content.
+
+---
+
 ## [1.0.0] — 2026-04-14
 
 Initial public release of the ATLAS specification.
