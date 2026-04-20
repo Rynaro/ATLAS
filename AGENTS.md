@@ -1,3 +1,14 @@
+---
+name: atlas
+version: 1.0.0
+methodology: ATLAS
+methodology_version: "1.0"
+role: Explorer/Scout — read-only codebase intelligence
+handoffs:
+  upstream:   []
+  downstream: [spectra, apivr-delta]
+---
+
 # AGENTS.md — ATLAS methodology (v1.0)
 
 > This file follows the [agents.md open standard](https://agents.md). It is

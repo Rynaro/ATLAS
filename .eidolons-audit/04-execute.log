@@ -1,0 +1,31 @@
+# Phase 5 — EXECUTE LOG
+
+Eidolon: atlas v1.0.0
+Date: 2026-04-20
+
+## Changes executed (in order)
+
+[WROTE] schemas/install.manifest.v1.json — GAP-02 CREATE: JSON Schema draft 2020-12 for install manifest
+[WROTE] AGENTS.md — GAP-03 PATCH: prepended §5 YAML frontmatter block (9 lines, name/version/methodology/methodology_version/role/handoffs)
+[WROTE] hosts/ (directory created)
+[WROTE] hosts/claude-code.md — GAP-04 CREATE: Claude Code wiring quick-reference
+[WROTE] hosts/copilot.md — GAP-05 CREATE: GitHub Copilot wiring quick-reference
+[WROTE] hosts/cursor.md — GAP-06 CREATE: Cursor wiring quick-reference
+[WROTE] hosts/opencode.md — GAP-07 CREATE: OpenCode wiring quick-reference
+[WROTE] DESIGN-RATIONALE.md — GAP-08 CREATE: architectural decision rationale for I-1 through I-8
+[WROTE] CLAUDE.md — GAP-09 PATCH: appended '## Consumer project usage' section (13 lines)
+[WROTE] install.sh — GAP-01 CREATE: full §2-conformant installer (chmod +x applied)
+[WROTE] CHANGELOG.md — added '## [Unreleased] — EIIS-1.0 conformance' section
+
+## Verification results
+
+- install.sh --help: PASS (all 8 flags printed correctly)
+- install.sh --dry-run --target /tmp/test: PASS (lists all expected file operations, prints token count and smoke-test banner)
+- install.sh --hosts raw --force --non-interactive --target /tmp/test: PASS (files written, manifest valid JSON, agent.md 842 tokens)
+- AGENTS.md frontmatter: PASS (reads with valid YAML block at top)
+- CLAUDE.md consumer section: PASS (appended without touching lines 1-87)
+- schemas/install.manifest.v1.json: PASS (valid JSON)
+
+## Blocked items
+
+None.
