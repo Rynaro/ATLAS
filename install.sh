@@ -280,7 +280,7 @@ See \`${TARGET}/agent.md\` for the full P0 rules and progressive disclosure tabl
 
   if [[ "$DRY_RUN" != "true" ]]; then
     printf "%s\n" "$AGENT_CONTENT" > ".claude/agents/atlas.md"
-    local chk; chk=$(sha256_file ".claude/agents/atlas.md")
+    chk=$(sha256_file ".claude/agents/atlas.md")
     FILES_WRITTEN+=("{\"path\":\".claude/agents/atlas.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
   else
     echo "  [dry-run] created .claude/agents/atlas.md"
@@ -316,7 +316,7 @@ See \`${TARGET}/AGENTS.md\` for the full ATLAS rule set and
     do_action "create AGENTS.md → symlink to ${TARGET}/AGENTS.md" \
       ln -sf "${TARGET}/AGENTS.md" "AGENTS.md"
     if [[ "$DRY_RUN" != "true" ]]; then
-      local chk; chk=$(sha256_file "${TARGET}/AGENTS.md")
+      chk=$(sha256_file "${TARGET}/AGENTS.md")
       FILES_WRITTEN+=("{\"path\":\"AGENTS.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
     fi
   fi
@@ -343,7 +343,7 @@ Phases: A (Assess) → T (Traverse, @atlas-traverse) → L (Locate, @atlas-locat
   if [[ ! -f "AGENTS.md" ]]; then
     do_action "symlink AGENTS.md" ln -sf "${TARGET}/AGENTS.md" "AGENTS.md"
     if [[ "$DRY_RUN" != "true" ]]; then
-      local chk; chk=$(sha256_file "${TARGET}/AGENTS.md")
+      chk=$(sha256_file "${TARGET}/AGENTS.md")
       FILES_WRITTEN+=("{\"path\":\"AGENTS.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
     fi
   fi
@@ -379,7 +379,7 @@ Full spec: \`${TARGET}/ATLAS.md\`."
   if [[ ! -f "AGENTS.md" ]]; then
     do_action "symlink AGENTS.md" ln -sf "${TARGET}/AGENTS.md" "AGENTS.md"
     if [[ "$DRY_RUN" != "true" ]]; then
-      local chk; chk=$(sha256_file "${TARGET}/AGENTS.md")
+      chk=$(sha256_file "${TARGET}/AGENTS.md")
       FILES_WRITTEN+=("{\"path\":\"AGENTS.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
     fi
   fi
