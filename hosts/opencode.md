@@ -10,7 +10,7 @@ From inside the consumer repo (after vendoring ATLAS via `bash install.sh --host
 
 ```bash
 # Root-level AGENTS.md
-ln -sf agents/atlas/AGENTS.md AGENTS.md
+ln -sf .eidolons/atlas/AGENTS.md AGENTS.md
 
 # Primary agent
 mkdir -p .opencode/agents
@@ -32,10 +32,10 @@ permission:
     "*": deny
 ---
 
-You are the ATLAS explorer/scout agent. Full rules: `agents/atlas/AGENTS.md`.
-Always-loaded profile: `agents/atlas/agent.md`.
-Phase skills: `agents/atlas/skills/<phase>/SKILL.md` — load only the active phase.
-Full spec: `agents/atlas/ATLAS.md`.
+You are the ATLAS explorer/scout agent. Full rules: `.eidolons/atlas/AGENTS.md`.
+Always-loaded profile: `.eidolons/atlas/agent.md`.
+Phase skills: `.eidolons/atlas/skills/<phase>/SKILL.md` — load only the active phase.
+Full spec: `.eidolons/atlas/ATLAS.md`.
 ```
 
 **Optional: phase subagents.** Create `.opencode/agents/atlas-traverse.md`:
@@ -53,8 +53,8 @@ permission:
     "*": deny
 ---
 
-Load `agents/atlas/skills/traverse/SKILL.md` and execute Phase T for the parent mission.
-Emit `map.md` using `agents/atlas/templates/traversal-map.md`.
+Load `.eidolons/atlas/skills/traverse/SKILL.md` and execute Phase T for the parent mission.
+Emit `map.md` using `.eidolons/atlas/templates/traversal-map.md`.
 Return ONE structured summary to the parent — never the raw transcript.
 ```
 
@@ -103,4 +103,4 @@ Verify the `permission:` block in `.opencode/agents/atlas.md`. The `"*": deny` u
 Subagents must return a single structured `FINDING` object — not free-form text. Edit the subagent body to include: *"Return ONE structured summary to the parent — never the raw transcript."*
 
 **`AGENTS.md` not auto-loaded.**
-OpenCode loads `AGENTS.md` from the repo root. Confirm the symlink resolves: `ls -la AGENTS.md` should show it pointing at `agents/atlas/AGENTS.md`.
+OpenCode loads `AGENTS.md` from the repo root. Confirm the symlink resolves: `ls -la AGENTS.md` should show it pointing at `.eidolons/atlas/AGENTS.md`.

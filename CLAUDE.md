@@ -90,14 +90,14 @@ Target pass rate: ≥80%.
 ## Consumer project usage
 
 After installing ATLAS into a consumer project (`bash install.sh`), Claude Code
-finds the installed agent at `agents/atlas/agent.md`.
+finds the installed agent at `.eidolons/atlas/agent.md`.
 
 **Load order in consumer projects:**
 
-1. `agents/atlas/agent.md` — entry point, always loaded (≤1000 tokens)
-2. `agents/atlas/ATLAS.md` — full methodology specification
-3. `agents/atlas/skills/<phase>/SKILL.md` — on-demand per phase
-4. `agents/atlas/templates/<artifact>.md` — on-demand per output type
+1. `.eidolons/atlas/agent.md` — entry point, always loaded (≤1000 tokens)
+2. `.eidolons/atlas/ATLAS.md` — full methodology specification
+3. `.eidolons/atlas/skills/<phase>/SKILL.md` — on-demand per phase
+4. `.eidolons/atlas/templates/<artifact>.md` — on-demand per output type
 
 **Quick install:**
 

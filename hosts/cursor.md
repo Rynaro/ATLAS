@@ -10,7 +10,7 @@ From inside the consumer repo (after vendoring ATLAS via `bash install.sh --host
 
 ```bash
 # Root-level AGENTS.md (Cursor fallback)
-ln -sf agents/atlas/AGENTS.md AGENTS.md
+ln -sf .eidolons/atlas/AGENTS.md AGENTS.md
 
 # MDC rule wrappers
 mkdir -p .cursor/rules
@@ -24,7 +24,7 @@ description: ATLAS v1.0 — read-only codebase scout. Always applied. Refuses wr
 alwaysApply: true
 ---
 
-See `agents/atlas/AGENTS.md` for the full rule set and `agents/atlas/ATLAS.md` for the spec.
+See `.eidolons/atlas/AGENTS.md` for the full rule set and `.eidolons/atlas/ATLAS.md` for the spec.
 
 Phases: A (Assess, inline) → T (Traverse, @atlas-traverse) → L (Locate, @atlas-locate) → A (Abstract, @atlas-abstract) → S (Synthesize, @atlas-synthesize)
 ```
@@ -38,7 +38,7 @@ globs: ["**/*"]
 alwaysApply: false
 ---
 
-@agents/atlas/skills/traverse/SKILL.md
+@.eidolons/atlas/skills/traverse/SKILL.md
 ```
 
 Repeat for `atlas-locate.mdc`, `atlas-abstract.mdc`, `atlas-synthesize.mdc` with matching descriptions from each SKILL.md.
@@ -88,7 +88,7 @@ In Cursor:
 Check `globs:` in the MDC wrappers. Default `["**/*"]` lets Cursor decide via description. Narrow the glob (e.g. `["test/**"]`) or use explicit `@atlas-<phase>` mentions to disambiguate.
 
 **`@atlas-traverse` file reference fails.**
-Cursor's `@<path>` syntax requires a path relative to repo root. Confirm the path in the `mdc` wrapper matches your actual install target (e.g. `agents/atlas/skills/traverse/SKILL.md`).
+Cursor's `@<path>` syntax requires a path relative to repo root. Confirm the path in the `mdc` wrapper matches your actual install target (e.g. `.eidolons/atlas/skills/traverse/SKILL.md`).
 
 **AGENTS.md not recognized.**
 Cursor 0.45+ reads `AGENTS.md` at repo root as a fallback. Earlier versions rely entirely on `.cursor/rules/`. Confirm your Cursor version and upgrade if needed.
