@@ -15,19 +15,19 @@ cat >> CLAUDE.md <<'EOF'
 ## ATLAS methodology
 
 This project runs under the **ATLAS v1.0** read-only scout methodology.
-See `agents/atlas/agent.md` for the always-loaded agent profile and
-`agents/atlas/AGENTS.md` for the full rule set.
+See `.eidolons/atlas/agent.md` for the always-loaded agent profile and
+`.eidolons/atlas/AGENTS.md` for the full rule set.
 EOF
 
 # Wire progressive-disclosure skills
 mkdir -p .claude/skills
 for phase in traverse locate abstract synthesize; do
-  ln -sf ../../agents/atlas/skills/$phase .claude/skills/atlas-$phase
+  ln -sf ../../.eidolons/atlas/skills/$phase .claude/skills/atlas-$phase
 done
 
 # Wire subagent
 mkdir -p .claude/agents
-cp agents/atlas/agent.md .claude/agents/atlas.md
+cp .eidolons/atlas/agent.md .claude/agents/atlas.md
 # Edit the copy: rename `allowed-tools:` → `tools:` and map to host-native tools
 ```
 
@@ -85,4 +85,4 @@ Ensure `.claude/agents/atlas.md` exists and the `name:` field in frontmatter mat
 Native Claude Code tools (`Read`, `Grep`, `Glob`) are advisory-bounded. For mechanical enforcement install `atlas-aci` as an MCP server — see `INSTALL.md` Appendix A.
 
 **agent.md token count.**
-`wc -w agents/atlas/agent.md | awk '{print $1/0.75}'` — must be ≤1000. See `INSTALL.md` Appendix B for safe trims.
+`wc -w .eidolons/atlas/agent.md | awk '{print $1/0.75}'` — must be ≤1000. See `INSTALL.md` Appendix B for safe trims.

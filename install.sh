@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # --------------------------------------------------------------------------- #
 # Defaults
 # --------------------------------------------------------------------------- #
-TARGET="./agents/${EIDOLON_NAME}"
+TARGET="./.eidolons/${EIDOLON_NAME}"
 HOSTS="auto"
 FORCE=false
 DRY_RUN=false

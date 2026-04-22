@@ -11,17 +11,17 @@ From inside the consumer repo (after vendoring ATLAS via `bash install.sh --host
 ```bash
 # Always-on custom instructions
 mkdir -p .github
-cp agents/atlas/.github/copilot-instructions.md .github/copilot-instructions.md
+cp .eidolons/atlas/.github/copilot-instructions.md .github/copilot-instructions.md
 
 # Root-level AGENTS.md for modern Copilot hosts
-ln -sf agents/atlas/AGENTS.md AGENTS.md
+ln -sf .eidolons/atlas/AGENTS.md AGENTS.md
 ```
 
 ---
 
 ## 2. Config
 
-**`.github/copilot-instructions.md`** — already bundled in `agents/atlas/.github/`. Contents: minimal pointer at `AGENTS.md` + the eight P0 invariants. ~60 lines, well under Copilot's recommended size.
+**`.github/copilot-instructions.md`** — already bundled in `.eidolons/atlas/.github/`. Contents: minimal pointer at `AGENTS.md` + the eight P0 invariants. ~60 lines, well under Copilot's recommended size.
 
 **`AGENTS.md` at repo root** — loaded by VS Code Copilot 1.92+, GitHub.com Copilot Chat, the Copilot coding agent. Contains the full ATLAS rule set with frontmatter.
 
@@ -34,7 +34,7 @@ applyTo: "**"
 
 When discussing codebase structure, routing, entrypoints, or module layout,
 operate under **ATLAS Phase T (Traverse)**. Zero LLM calls during retrieval.
-Output is `map.md`. See `agents/atlas/skills/traverse/SKILL.md`.
+Output is `map.md`. See `.eidolons/atlas/skills/traverse/SKILL.md`.
 ```
 
 Repeat for Locate, Abstract, Synthesize with appropriate `applyTo:` globs.
