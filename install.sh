@@ -206,49 +206,103 @@ fi
 # --------------------------------------------------------------------------- #
 # Host dispatch files
 # --------------------------------------------------------------------------- #
-append_or_create() {
+# upsert_eidolon_block <file> <content_literal> <role>
+#
+# Owns a marker-bounded region in a composable dispatch file (CLAUDE.md,
+# AGENTS.md, .github/copilot-instructions.md). If the region already exists,
+# rewrites its body in place. Otherwise appends a new block. Cleans up any
+# pre-existing symlink at the target path (legacy ATLAS installer wiring).
+upsert_eidolon_block() {
   local dst="$1" content="$2" role="$3"
+  local start="<!-- eidolon:${EIDOLON_NAME} start -->"
+  local end="<!-- eidolon:${EIDOLON_NAME} end -->"
+
   if [[ "$DRY_RUN" == "true" ]]; then
-    local mode="created"
-    [[ -f "$dst" ]] && mode="appended"
-    echo "  [dry-run] ${mode} ${dst}"
+    local action="append"
+    [[ -f "$dst" ]] && grep -qF "$start" "$dst" 2>/dev/null && action="rewrite"
+    echo "  [dry-run] ${action} eidolon:${EIDOLON_NAME} block in ${dst}"
     return
   fi
-  local mode="created"
-  if [[ -f "$dst" ]]; then
-    # Only append if our marker is not already present
-    if grep -qF "<!-- atlas-eiis-dispatch -->" "$dst" 2>/dev/null; then
-      log "  skip (already dispatched): ${dst}"
-      return
-    fi
-    mode="appended"
-    printf "\n%s\n" "$content" >> "$dst"
-  else
-    mkdir -p "$(dirname "$dst")"
-    printf "%s\n" "$content" > "$dst"
+
+  mkdir -p "$(dirname "$dst")" 2>/dev/null || true
+
+  # Legacy cleanup: some earlier installers symlinked root AGENTS.md.
+  # Convert symlink → real file before upserting.
+  if [[ -L "$dst" ]]; then
+    rm -f "$dst"
   fi
+
+  local content_file mode tmp
+  content_file="$(mktemp)"
+  printf '%s\n' "$content" > "$content_file"
+
+  if [[ -f "$dst" ]] && grep -qF "$start" "$dst" 2>/dev/null; then
+    mode="rewritten"
+    tmp="$(mktemp)"
+    awk -v start="$start" -v end="$end" -v cf="$content_file" '
+      BEGIN { in_block = 0 }
+      $0 == start {
+        print start
+        while ((getline line < cf) > 0) print line
+        close(cf)
+        in_block = 1
+        next
+      }
+      $0 == end {
+        print end
+        in_block = 0
+        next
+      }
+      !in_block { print }
+    ' "$dst" > "$tmp"
+    mv "$tmp" "$dst"
+  elif [[ -f "$dst" ]]; then
+    mode="appended"
+    {
+      printf '\n%s\n' "$start"
+      cat "$content_file"
+      printf '%s\n' "$end"
+    } >> "$dst"
+  else
+    mode="created"
+    {
+      printf '%s\n' "$start"
+      cat "$content_file"
+      printf '%s\n' "$end"
+    } > "$dst"
+  fi
+
+  rm -f "$content_file"
+
   local chk; chk=$(sha256_file "$dst")
   FILES_WRITTEN+=("{\"path\":\"${dst}\",\"sha256\":\"${chk}\",\"role\":\"${role}\",\"mode\":\"${mode}\"}")
 }
+
+# --------------------------------------------------------------------------- #
+# Shared dispatch block (identical content in CLAUDE.md / AGENTS.md /
+# .github/copilot-instructions.md — composable, every Eidolon emits its own
+# marker-bounded section).
+# --------------------------------------------------------------------------- #
+SHARED_BLOCK="## ATLAS — Read-only codebase scout (v${EIDOLON_VERSION})
+
+Entry:     \`${TARGET}/agent.md\`
+Full spec: \`${TARGET}/ATLAS.md\`
+Cycle:     A (Assess) → T (Traverse) → L (Locate) → A (Abstract) → S (Synthesize)
+
+**P0 (non-negotiable):** read-only (refuse edit/write/commit/deploy/migrate/refactor/fix); mission-first (requires \`mission.md\` + \`DECISION_TARGET\`); bounded ACI (\`view_file\` ≤100, \`search_text\` ≤50, \`list_dir\` ≤200); evidence-anchored claims (\`path:line\` + H|M|L); deterministic retrieval first, LLM search last."
+
+# Emit the shared block to the open-standard AGENTS.md unconditionally —
+# it is the host-agnostic root dispatch file and is read by GitHub Copilot,
+# Cursor, OpenCode, and any host implementing the agents.md standard.
+if [[ "$MANIFEST_ONLY" != "true" ]]; then
+  upsert_eidolon_block "AGENTS.md" "$SHARED_BLOCK" "dispatch"
+fi
 
 # ---- claude-code ---------------------------------------------------------- #
 if hosts_include "claude-code" && [[ "$MANIFEST_ONLY" != "true" ]]; then
   log "Wiring: claude-code"
 
-  CLAUDE_BLOCK="<!-- atlas-eiis-dispatch -->
-## ATLAS methodology
-
-This project runs under the **ATLAS v${EIDOLON_VERSION}** read-only scout methodology.
-See \`${TARGET}/agent.md\` for the always-loaded agent profile and
-\`${TARGET}/AGENTS.md\` for the full rule set.
-Skills live in \`${TARGET}/skills/<phase>/SKILL.md\` and load progressively per phase.
-
-**Absolute rules (P0):**
-- Read-only: refuse edit/write/commit/deploy/migrate/refactor/fix.
-- Mission-first: no exploration without \`mission.md\` + \`DECISION_TARGET\`.
-- Evidence-anchored claims: every fact carries \`path:line_start-line_end\` + H|M|L."
-
-  append_or_create "CLAUDE.md" "$CLAUDE_BLOCK" "dispatch"
+  upsert_eidolon_block "CLAUDE.md" "$SHARED_BLOCK" "dispatch"
 
   # Wire skills
   do_action "mkdir -p .claude/skills" mkdir -p ".claude/skills"
@@ -290,36 +344,7 @@ fi
 # ---- copilot -------------------------------------------------------------- #
 if hosts_include "copilot" && [[ "$MANIFEST_ONLY" != "true" ]]; then
   log "Wiring: copilot"
-  do_action "mkdir -p .github" mkdir -p ".github"
-
-  COPILOT_CONTENT="<!-- atlas-eiis-dispatch -->
-# GitHub Copilot — ATLAS methodology
-
-> This file is the primary custom-instructions entry for GitHub Copilot.
-> The authoritative rule set is \`${TARGET}/AGENTS.md\`.
-
-See \`${TARGET}/AGENTS.md\` for the full ATLAS rule set and
-\`${TARGET}/ATLAS.md\` for the v${EIDOLON_VERSION} specification.
-
-## Non-negotiable rules
-
-1. **Read-only.** Refuse \`edit\`, \`write\`, \`commit\`, \`deploy\`, \`migrate\`, \`refactor\`, \`fix\`. Hand off.
-2. **Mission-first.** No exploration without \`mission.md\` + \`DECISION_TARGET\`.
-3. **Bounded ACI.** \`view_file\` ≤100 lines; \`search_text\` ≤50 matches; \`list_dir\` ≤200 entries.
-4. **Evidence-anchored claims.** Every fact carries \`path:line_start-line_end\` + H|M|L.
-5. **Deterministic-first retrieval.** Symbol index → code graph → rg → AST. LLM search is last resort."
-
-  append_or_create ".github/copilot-instructions.md" "$COPILOT_CONTENT" "dispatch"
-
-  # Root-level AGENTS.md pointer
-  if [[ ! -f "AGENTS.md" ]]; then
-    do_action "create AGENTS.md → symlink to ${TARGET}/AGENTS.md" \
-      ln -sf "${TARGET}/AGENTS.md" "AGENTS.md"
-    if [[ "$DRY_RUN" != "true" ]]; then
-      chk=$(sha256_file "${TARGET}/AGENTS.md")
-      FILES_WRITTEN+=("{\"path\":\"AGENTS.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
-    fi
-  fi
+  upsert_eidolon_block ".github/copilot-instructions.md" "$SHARED_BLOCK" "dispatch"
 fi
 
 # ---- cursor --------------------------------------------------------------- #
@@ -337,15 +362,18 @@ See \`${TARGET}/AGENTS.md\` for the full rule set and \`${TARGET}/ATLAS.md\` for
 
 Phases: A (Assess) → T (Traverse, @atlas-traverse) → L (Locate, @atlas-locate) → A (Abstract, @atlas-abstract) → S (Synthesize, @atlas-synthesize)"
 
-  append_or_create ".cursor/rules/atlas.mdc" "$CURSOR_MDC" "dispatch"
-
-  # Root-level AGENTS.md
-  if [[ ! -f "AGENTS.md" ]]; then
-    do_action "symlink AGENTS.md" ln -sf "${TARGET}/AGENTS.md" "AGENTS.md"
-    if [[ "$DRY_RUN" != "true" ]]; then
-      chk=$(sha256_file "${TARGET}/AGENTS.md")
-      FILES_WRITTEN+=("{\"path\":\"AGENTS.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
+  # .cursor/rules/atlas.mdc is owned by this Eidolon (one file per Eidolon);
+  # overwrite when --force, skip otherwise.
+  if [[ ! -f ".cursor/rules/atlas.mdc" || "$FORCE" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "  [dry-run] write .cursor/rules/atlas.mdc"
+    else
+      printf "%s\n" "$CURSOR_MDC" > ".cursor/rules/atlas.mdc"
+      chk=$(sha256_file ".cursor/rules/atlas.mdc")
+      FILES_WRITTEN+=("{\"path\":\".cursor/rules/atlas.mdc\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
     fi
+  else
+    log "  skip .cursor/rules/atlas.mdc (exists — pass --force to overwrite)"
   fi
 fi
 
@@ -373,15 +401,17 @@ Always-loaded profile: \`${TARGET}/agent.md\`.
 Phase skills: \`${TARGET}/skills/<phase>/SKILL.md\` — load only the active phase.
 Full spec: \`${TARGET}/ATLAS.md\`."
 
-  append_or_create ".opencode/agents/atlas.md" "$OPENCODE_AGENT" "dispatch"
-
-  # Root-level AGENTS.md
-  if [[ ! -f "AGENTS.md" ]]; then
-    do_action "symlink AGENTS.md" ln -sf "${TARGET}/AGENTS.md" "AGENTS.md"
-    if [[ "$DRY_RUN" != "true" ]]; then
-      chk=$(sha256_file "${TARGET}/AGENTS.md")
-      FILES_WRITTEN+=("{\"path\":\"AGENTS.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
+  # .opencode/agents/atlas.md is owned by this Eidolon; overwrite on --force.
+  if [[ ! -f ".opencode/agents/atlas.md" || "$FORCE" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "  [dry-run] write .opencode/agents/atlas.md"
+    else
+      printf "%s\n" "$OPENCODE_AGENT" > ".opencode/agents/atlas.md"
+      chk=$(sha256_file ".opencode/agents/atlas.md")
+      FILES_WRITTEN+=("{\"path\":\".opencode/agents/atlas.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
     fi
+  else
+    log "  skip .opencode/agents/atlas.md (exists — pass --force to overwrite)"
   fi
 fi
 
