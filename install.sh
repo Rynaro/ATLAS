@@ -17,6 +17,7 @@ FORCE=false
 DRY_RUN=false
 NON_INTERACTIVE=false
 MANIFEST_ONLY=false
+SHARED_DISPATCH=false
 
 # --------------------------------------------------------------------------- #
 # Help
@@ -29,14 +30,19 @@ Install the ATLAS v${EIDOLON_VERSION} read-only codebase scout methodology
 into the current consumer project.
 
 Options:
-  --target DIR          Target install dir (default: ${TARGET})
-  --hosts LIST          claude-code,copilot,cursor,opencode,all (default: auto)
-  --force               Overwrite existing install without prompting
-  --dry-run             Print actions without writing any files
-  --non-interactive     No prompts; fail on ambiguity (meta-installer mode)
-  --manifest-only       Only emit install.manifest.json (no file copies)
-  --version             Print Eidolon version and exit
-  -h, --help            Show this help and exit
+  --target DIR            Target install dir (default: ${TARGET})
+  --hosts LIST            claude-code,copilot,cursor,opencode,all (default: auto)
+  --shared-dispatch       Compose marker-bounded section in root AGENTS.md /
+                          CLAUDE.md / .github/copilot-instructions.md (opt-in).
+  --no-shared-dispatch    Skip root dispatch files (default). Per-vendor files
+                          under .claude/, .github/, .cursor/, .opencode/ are
+                          always written and are self-sufficient.
+  --force                 Overwrite existing install without prompting
+  --dry-run               Print actions without writing any files
+  --non-interactive       No prompts; fail on ambiguity (meta-installer mode)
+  --manifest-only         Only emit install.manifest.json (no file copies)
+  --version               Print Eidolon version and exit
+  -h, --help              Show this help and exit
 
 Host detection (--hosts auto):
   claude-code   detected if CLAUDE.md or .claude/ exists
@@ -57,14 +63,16 @@ EOF
 # --------------------------------------------------------------------------- #
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target)           TARGET="$2"; shift 2 ;;
-    --hosts)            HOSTS="$2"; shift 2 ;;
-    --force)            FORCE=true; shift ;;
-    --dry-run)          DRY_RUN=true; shift ;;
-    --non-interactive)  NON_INTERACTIVE=true; shift ;;
-    --manifest-only)    MANIFEST_ONLY=true; shift ;;
-    --version)          echo "${EIDOLON_VERSION}"; exit 0 ;;
-    -h|--help)          usage; exit 0 ;;
+    --target)               TARGET="$2"; shift 2 ;;
+    --hosts)                HOSTS="$2"; shift 2 ;;
+    --shared-dispatch)      SHARED_DISPATCH=true; shift ;;
+    --no-shared-dispatch)   SHARED_DISPATCH=false; shift ;;
+    --force)                FORCE=true; shift ;;
+    --dry-run)              DRY_RUN=true; shift ;;
+    --non-interactive)      NON_INTERACTIVE=true; shift ;;
+    --manifest-only)        MANIFEST_ONLY=true; shift ;;
+    --version)              echo "${EIDOLON_VERSION}"; exit 0 ;;
+    -h|--help)              usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
@@ -291,24 +299,114 @@ Cycle:     A (Assess) → T (Traverse) → L (Locate) → A (Abstract) → S (Sy
 
 **P0 (non-negotiable):** read-only (refuse edit/write/commit/deploy/migrate/refactor/fix); mission-first (requires \`mission.md\` + \`DECISION_TARGET\`); bounded ACI (\`view_file\` ≤100, \`search_text\` ≤50, \`list_dir\` ≤200); evidence-anchored claims (\`path:line\` + H|M|L); deterministic retrieval first, LLM search last."
 
-# Emit the shared block to the open-standard AGENTS.md unconditionally —
-# it is the host-agnostic root dispatch file and is read by GitHub Copilot,
-# Cursor, OpenCode, and any host implementing the agents.md standard.
-if [[ "$MANIFEST_ONLY" != "true" ]]; then
+# Shared dispatch — opt-in composition into root AGENTS.md / CLAUDE.md /
+# .github/copilot-instructions.md. When false (default), only per-vendor
+# skill and agent files are written — each host auto-discovers those.
+if [[ "$MANIFEST_ONLY" != "true" && "$SHARED_DISPATCH" == "true" ]]; then
   upsert_eidolon_block "AGENTS.md" "$SHARED_BLOCK" "dispatch"
 fi
 
-# ---- claude-code ---------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Per-skill wiring helpers (no symlinks, no cross-vendor shortcuts)
+# --------------------------------------------------------------------------- #
+
+# strip_frontmatter <file> → body after the first --- ... --- block
+strip_frontmatter() {
+  local f="$1"
+  if [[ "$(head -1 "$f")" == "---" ]]; then
+    awk 'NR==1 && /^---$/ {in_fm=1; next}
+         in_fm && /^---$/ {in_fm=0; next}
+         !in_fm {print}' "$f"
+  else
+    cat "$f"
+  fi
+}
+
+# extract_fm_field <file> <field_name> → value or empty
+extract_fm_field() {
+  awk -v field="$2" '
+    NR==1 && /^---$/ { in_fm=1; next }
+    in_fm && /^---$/ { exit }
+    in_fm { p=index($0, field ":"); if (p==1) { sub("^" field ":[[:space:]]*", ""); print; exit } }
+  ' "$1"
+}
+
+# wire_skill <src_dir> <skill_name> — writes one skill into every wired vendor
+wire_skill() {
+  local src_dir="$1" skill_name="$2"
+  local src_skill="${src_dir}/SKILL.md"
+  [[ -f "$src_skill" ]] || { warn "skill source missing: ${src_skill}"; return; }
+
+  local description
+  description="$(extract_fm_field "$src_skill" "description")"
+  [[ -z "$description" ]] && description="${skill_name}"
+
+  if hosts_include "claude-code"; then
+    # Claude Code: dir-per-skill, preserve full structure (SKILL.md + resources).
+    local dst_dir=".claude/skills/${skill_name}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "  [dry-run] copy ${src_dir}/ → ${dst_dir}/"
+    else
+      rm -rf "$dst_dir"  # clean any stale symlink or prior copy
+      mkdir -p "$dst_dir"
+      cp -R "${src_dir}/." "${dst_dir}/"
+      local chk; chk=$(sha256_file "${dst_dir}/SKILL.md")
+      FILES_WRITTEN+=("{\"path\":\"${dst_dir}/SKILL.md\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+    fi
+  fi
+
+  if hosts_include "copilot"; then
+    # Copilot: .github/instructions/<name>.instructions.md with applyTo frontmatter.
+    local dst=".github/instructions/${skill_name}.instructions.md"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "  [dry-run] write ${dst}"
+    else
+      mkdir -p ".github/instructions"
+      {
+        echo "---"
+        echo "applyTo: \"**\""
+        echo "description: \"${description}\""
+        echo "---"
+        strip_frontmatter "$src_skill"
+      } > "$dst"
+      local chk; chk=$(sha256_file "$dst")
+      FILES_WRITTEN+=("{\"path\":\"${dst}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+    fi
+  fi
+
+  if hosts_include "cursor"; then
+    # Cursor: .cursor/rules/<name>.mdc with MDC frontmatter.
+    local dst=".cursor/rules/${skill_name}.mdc"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "  [dry-run] write ${dst}"
+    else
+      mkdir -p ".cursor/rules"
+      {
+        echo "---"
+        echo "description: \"${description}\""
+        echo "alwaysApply: false"
+        echo "---"
+        strip_frontmatter "$src_skill"
+      } > "$dst"
+      local chk; chk=$(sha256_file "$dst")
+      FILES_WRITTEN+=("{\"path\":\"${dst}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+    fi
+  fi
+}
+
+# Emit per-skill files for every phase
+if [[ "$MANIFEST_ONLY" != "true" ]]; then
+  log "Wiring per-skill files across hosts"
+  for phase in traverse locate abstract synthesize; do
+    wire_skill "${SCRIPT_DIR}/skills/${phase}" "atlas-${phase}"
+  done
+fi
+
+# ---- claude-code (methodology-level subagent + optional shared dispatch) --- #
 if hosts_include "claude-code" && [[ "$MANIFEST_ONLY" != "true" ]]; then
   log "Wiring: claude-code"
 
-  upsert_eidolon_block "CLAUDE.md" "$SHARED_BLOCK" "dispatch"
-
-  # Wire skills
-  do_action "mkdir -p .claude/skills" mkdir -p ".claude/skills"
-  for phase in traverse locate abstract synthesize; do
-    do_action "wire skill ${phase}" ln -sf "../../${TARGET}/skills/${phase}" ".claude/skills/atlas-${phase}" 2>/dev/null || true
-  done
+  [[ "$SHARED_DISPATCH" == "true" ]] && upsert_eidolon_block "CLAUDE.md" "$SHARED_BLOCK" "dispatch"
 
   # Wire subagent
   do_action "mkdir -p .claude/agents" mkdir -p ".claude/agents"
@@ -343,37 +441,18 @@ fi
 
 # ---- copilot -------------------------------------------------------------- #
 if hosts_include "copilot" && [[ "$MANIFEST_ONLY" != "true" ]]; then
-  log "Wiring: copilot"
-  upsert_eidolon_block ".github/copilot-instructions.md" "$SHARED_BLOCK" "dispatch"
+  log "Wiring: copilot (per-skill instructions already emitted above)"
+  [[ "$SHARED_DISPATCH" == "true" ]] && \
+    upsert_eidolon_block ".github/copilot-instructions.md" "$SHARED_BLOCK" "dispatch"
 fi
 
 # ---- cursor --------------------------------------------------------------- #
 if hosts_include "cursor" && [[ "$MANIFEST_ONLY" != "true" ]]; then
-  log "Wiring: cursor"
-  do_action "mkdir -p .cursor/rules" mkdir -p ".cursor/rules"
-
-  CURSOR_MDC="---
-description: ATLAS v${EIDOLON_VERSION} — read-only codebase scout. Always applied. Refuses write verbs; requires mission.md with DECISION_TARGET; bounded ACI; evidence-anchored claims.
-alwaysApply: true
----
-
-<!-- atlas-eiis-dispatch -->
-See \`${TARGET}/AGENTS.md\` for the full rule set and \`${TARGET}/ATLAS.md\` for the spec.
-
-Phases: A (Assess) → T (Traverse, @atlas-traverse) → L (Locate, @atlas-locate) → A (Abstract, @atlas-abstract) → S (Synthesize, @atlas-synthesize)"
-
-  # .cursor/rules/atlas.mdc is owned by this Eidolon (one file per Eidolon);
-  # overwrite when --force, skip otherwise.
-  if [[ ! -f ".cursor/rules/atlas.mdc" || "$FORCE" == "true" ]]; then
-    if [[ "$DRY_RUN" == "true" ]]; then
-      echo "  [dry-run] write .cursor/rules/atlas.mdc"
-    else
-      printf "%s\n" "$CURSOR_MDC" > ".cursor/rules/atlas.mdc"
-      chk=$(sha256_file ".cursor/rules/atlas.mdc")
-      FILES_WRITTEN+=("{\"path\":\".cursor/rules/atlas.mdc\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
-    fi
-  else
-    log "  skip .cursor/rules/atlas.mdc (exists — pass --force to overwrite)"
+  log "Wiring: cursor (per-skill rules already emitted above)"
+  # Clean up the methodology-level atlas.mdc from previous installers —
+  # per-skill atlas-<phase>.mdc files are now the canonical Cursor surface.
+  if [[ -f ".cursor/rules/atlas.mdc" && "$FORCE" == "true" ]]; then
+    rm -f ".cursor/rules/atlas.mdc"
   fi
 fi
 
