@@ -178,6 +178,7 @@ maybe_mkdir "${TARGET}/templates"
 maybe_mkdir "${TARGET}/schemas"
 maybe_mkdir "${TARGET}/evals"
 maybe_mkdir "${TARGET}/.github"
+maybe_mkdir "${TARGET}/commands"
 
 # --------------------------------------------------------------------------- #
 # Copy methodology files
@@ -209,6 +210,14 @@ if [[ "$MANIFEST_ONLY" != "true" ]]; then
   copy_file "schemas/install.manifest.v1.json"          "${TARGET}/schemas/install.manifest.v1.json"  "other"
   copy_file "evals/canary-missions.md"                  "${TARGET}/evals/canary-missions.md"          "other"
   copy_file ".github/copilot-instructions.md"           "${TARGET}/.github/copilot-instructions.md"   "dispatch"
+  # Eidolons-nexus subcommands shipped by ATLAS. Auto-surfaced by the
+  # nexus dispatcher (cli/src/dispatch_eidolon.sh) as
+  # `eidolons atlas <name> [...]` once installed under .eidolons/atlas/commands/.
+  copy_file "commands/aci.sh"                           "${TARGET}/commands/aci.sh"                   "other"
+  # Preserve the executable bit so the dispatcher can exec it directly.
+  if [[ "$DRY_RUN" != "true" ]]; then
+    chmod +x "${TARGET}/commands/aci.sh"
+  fi
 fi
 
 # --------------------------------------------------------------------------- #
