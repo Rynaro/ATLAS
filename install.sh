@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# ATLAS installer — EIIS v1.0 conformant
+# ATLAS installer — EIIS v1.1 conformant
 # Usage: bash install.sh [OPTIONS]
 set -euo pipefail
 
 EIDOLON_NAME="atlas"
-EIDOLON_VERSION="1.0.0"
+EIDOLON_VERSION="1.0.4"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -31,12 +31,16 @@ into the current consumer project.
 
 Options:
   --target DIR            Target install dir (default: ${TARGET})
-  --hosts LIST            claude-code,copilot,cursor,opencode,all (default: auto)
+  --hosts LIST            claude-code,copilot,cursor,opencode,codex,all
+                          (default: auto)
   --shared-dispatch       Compose marker-bounded section in root AGENTS.md /
                           CLAUDE.md / .github/copilot-instructions.md (opt-in).
   --no-shared-dispatch    Skip root dispatch files (default). Per-vendor files
-                          under .claude/, .github/, .cursor/, .opencode/ are
-                          always written and are self-sufficient.
+                          under .claude/, .github/, .cursor/, .opencode/,
+                          .codex/ are always written and are self-sufficient.
+                          NB: when 'codex' is wired, root AGENTS.md is still
+                          written (Codex's primary instruction surface — EIIS
+                          v1.1 §4.1.0); a warning is emitted to stderr.
   --force                 Overwrite existing install without prompting
   --dry-run               Print actions without writing any files
   --non-interactive       No prompts; fail on ambiguity (meta-installer mode)
@@ -49,6 +53,9 @@ Host detection (--hosts auto):
   copilot       detected if .github/ exists
   cursor        detected if .cursor/ or .cursorrules exists
   opencode      detected if .opencode/ exists
+  codex         detected if .codex/ exists, or if AGENTS.md exists at the
+                cwd root with no .github/ and no .codex/ (Codex's canonical
+                project-instruction file per EIIS v1.1 §4.1.0)
 
 Examples:
   bash install.sh
@@ -115,6 +122,14 @@ detect_hosts() {
   [[ -d ".github" ]]                                 && detected+=("copilot")
   [[ -d ".cursor" || -f ".cursorrules" ]]            && detected+=("cursor")
   [[ -d ".opencode" ]]                               && detected+=("opencode")
+  # Codex (EIIS v1.1 §4.1.0): .codex/ is the definitive Codex-only signal.
+  # AGENTS.md alone (no .github/, no .codex/) also indicates a Codex-only
+  # project; when both AGENTS.md and .github/ are present they co-own the
+  # file and copilot is detected via .github/ above.
+  [[ -d ".codex" ]]                                  && detected+=("codex")
+  if [[ -f "AGENTS.md" && ! -d ".github" && ! -d ".codex" ]]; then
+    detected+=("codex")
+  fi
   printf "%s\n" "${detected[@]:-}"
 }
 
@@ -128,12 +143,23 @@ if [[ "$HOSTS" == "auto" ]]; then
     HOSTS_ARRAY=("raw")
   fi
 elif [[ "$HOSTS" == "all" ]]; then
-  HOSTS_ARRAY=("claude-code" "copilot" "cursor" "opencode")
+  HOSTS_ARRAY=("claude-code" "copilot" "cursor" "opencode" "codex")
 else
   IFS=',' read -ra HOSTS_ARRAY <<< "$HOSTS"
 fi
 
 hosts_include() { local h; for h in "${HOSTS_ARRAY[@]}"; do [[ "$h" == "$1" ]] && return 0; done; return 1; }
+
+# EIIS v1.1 §4.1.0 — root AGENTS.md is Codex's primary instruction surface.
+# When 'codex' is wired, the marker-bounded block MUST be written even if
+# the user passed --no-shared-dispatch. Emit a warning so the override is
+# visible; honour --shared-dispatch/--no-shared-dispatch faithfully for the
+# other hosts (CLAUDE.md, .github/copilot-instructions.md).
+SHARED_DISPATCH_AGENTS_MD=$SHARED_DISPATCH
+if hosts_include "codex" && [[ "$SHARED_DISPATCH" != "true" ]]; then
+  warn "--no-shared-dispatch ignored for AGENTS.md when hosts include codex; AGENTS.md is Codex's primary instruction surface (EIIS v1.1 §4.1.0)."
+  SHARED_DISPATCH_AGENTS_MD=true
+fi
 
 # --------------------------------------------------------------------------- #
 # Idempotency check
@@ -302,7 +328,9 @@ Cycle:     A (Assess) → T (Traverse) → L (Locate) → A (Abstract) → S (Sy
 # Shared dispatch — opt-in composition into root AGENTS.md / CLAUDE.md /
 # .github/copilot-instructions.md. When false (default), only per-vendor
 # skill and agent files are written — each host auto-discovers those.
-if [[ "$MANIFEST_ONLY" != "true" && "$SHARED_DISPATCH" == "true" ]]; then
+# AGENTS.md is treated specially when 'codex' is wired (EIIS v1.1 §4.1.0):
+# always written regardless of --shared-dispatch.
+if [[ "$MANIFEST_ONLY" != "true" && "$SHARED_DISPATCH_AGENTS_MD" == "true" ]]; then
   upsert_eidolon_block "AGENTS.md" "$SHARED_BLOCK" "dispatch"
 fi
 
@@ -491,6 +519,65 @@ Full spec: \`${TARGET}/ATLAS.md\`."
     fi
   else
     log "  skip .opencode/agents/atlas.md (exists — pass --force to overwrite)"
+  fi
+fi
+
+# ---- codex (EIIS v1.1 §4.5) ---------------------------------------------- #
+# Codex subagent contract: .codex/agents/<name>.md with YAML frontmatter
+# (`name`, `description` required; `tools`, `model` optional). Source:
+# https://developers.openai.com/codex/subagents
+# Root AGENTS.md is co-owned by copilot+codex (§4.1.0) — written above when
+# SHARED_DISPATCH_AGENTS_MD is true.
+if hosts_include "codex" && [[ "$MANIFEST_ONLY" != "true" ]]; then
+  log "Wiring: codex"
+  do_action "mkdir -p .codex/agents" mkdir -p ".codex/agents"
+
+  CODEX_AGENT="---
+name: atlas
+description: Read-only codebase scout running the ATLAS five-phase pipeline (Assess, Traverse, Locate, Abstract, Synthesize). Use for codebase exploration, impact analysis, and pre-planning questions; refuses write verbs and hands off to SPECTRA or APIVR-Delta.
+---
+
+# ATLAS — Explorer/Scout Subagent (Codex)
+
+You execute the ATLAS methodology: **A**ssess -> **T**raverse -> **L**ocate ->
+**A**bstract -> **S**ynthesize. You are **read-only**. If asked to mutate
+anything, hand off.
+
+Canonical methodology: \`${TARGET}/agent.md\` (always-loaded profile,
+<=1000 tokens). Full ruleset: \`${TARGET}/AGENTS.md\`. Full spec:
+\`${TARGET}/ATLAS.md\`.
+
+## P0 (non-negotiable)
+
+- Read-only tools only. Refuse \`edit\`, \`write\`, \`commit\`, \`deploy\`,
+  \`migrate\`, \`install\`, \`refactor\`, \`fix\`. Hand off to SPECTRA (spec)
+  or APIVR-Delta (implementation).
+- Mission brief first. Do nothing until \`mission.md\` exists with a
+  concrete \`DECISION_TARGET\`.
+- Bounded probes: \`view_file\` <=100 lines; \`search_text\` <=50 matches;
+  \`list_dir\` <=200 entries.
+- Evidence-anchored claims. Every factual statement carries
+  \`path:line_start-line_end\` + confidence \`H|M|L\`.
+- Deterministic retrieval first (symbol lookup, code-graph, ripgrep). LLM
+  search is last resort.
+
+## Invocation
+
+Address as: \"ATLAS, scout this repo for <DECISION_TARGET>\". Emit
+\`mission.md\` first, then run Traverse, Locate, Abstract, Synthesize.
+Final artefact: \`scout-report.md\` <=3000 tokens with FINDING-XXX IDs."
+
+  # .codex/agents/atlas.md is owned by this Eidolon; overwrite on --force.
+  if [[ ! -f ".codex/agents/atlas.md" || "$FORCE" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "  [dry-run] write .codex/agents/atlas.md"
+    else
+      printf "%s\n" "$CODEX_AGENT" > ".codex/agents/atlas.md"
+      chk=$(sha256_file ".codex/agents/atlas.md")
+      FILES_WRITTEN+=("{\"path\":\".codex/agents/atlas.md\",\"sha256\":\"${chk}\",\"role\":\"dispatch\",\"mode\":\"created\"}")
+    fi
+  else
+    log "  skip .codex/agents/atlas.md (exists — pass --force to overwrite)"
   fi
 fi
 

@@ -1,0 +1,29 @@
+{
+  "eidolon": "atlas",
+  "version": "1.0.4",
+  "methodology": "ATLAS",
+  "installed_at": "2026-04-25T00:00:00Z",
+  "target": "./.eidolons/atlas",
+  "hosts_wired": ["codex"],
+  "files_written": [
+    {"path": "./.eidolons/atlas/agent.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "entry-point", "mode": "created"},
+    {"path": "./.eidolons/atlas/AGENTS.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "entry-point", "mode": "created"},
+    {"path": "./.eidolons/atlas/ATLAS.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "spec", "mode": "created"},
+    {"path": "AGENTS.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"},
+    {"path": ".codex/agents/atlas.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"}
+  ],
+  "handoffs_declared": {
+    "upstream": [],
+    "downstream": ["spectra", "apivr-delta"]
+  },
+  "token_budget": {
+    "entry": 842,
+    "working_set_target": 1000
+  },
+  "security": {
+    "reads_repo": true,
+    "reads_network": false,
+    "writes_repo": false,
+    "persists": [".atlas/.memex"]
+  }
+}

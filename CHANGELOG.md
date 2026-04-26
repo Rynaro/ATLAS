@@ -7,6 +7,58 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.0.4] — 2026-04-25 — EIIS-1.1 conformance + OpenAI Codex host support
+
+### Added
+
+- **`EIIS_VERSION`** — root-level file declaring `1.1`, the targeted EIIS
+  minor (resolves drift D-6).
+- **`install.sh` codex host wiring** — recognises `codex` in `--hosts` parsing
+  and the `all` expansion (`claude-code,copilot,cursor,opencode,codex`).
+  Auto-detection adds `codex` when `.codex/` exists or when `AGENTS.md`
+  exists at the cwd root with no `.github/` and no `.codex/` directory
+  (per EIIS v1.1 §4.1.0).
+- **`.codex/agents/atlas.md`** — per-Eidolon Codex subagent file emitted
+  on install. YAML frontmatter contains `name: atlas` and a non-empty
+  `description`; body mirrors the ATLAS Claude subagent prompt
+  (read-only P0 rules, methodology pointer to
+  `./.eidolons/atlas/agent.md`). Source:
+  <https://developers.openai.com/codex/subagents>.
+- **Marker-bounded block in root `AGENTS.md`** — written when `codex` is
+  in the wired host list (Codex's primary instruction surface per EIIS
+  v1.1 §4.1.0). Idempotent via the existing `upsert_eidolon_block`
+  helper. When the user passes `--no-shared-dispatch` together with
+  `codex`, the AGENTS.md write is preserved with a stderr warning;
+  CLAUDE.md and `.github/copilot-instructions.md` still honour the
+  flag faithfully.
+- **`examples/install.manifest.json`** — sample manifest fixture
+  reflecting a Codex-only install (`hosts_wired: ["codex"]`,
+  `files_written` lists both `AGENTS.md` and `.codex/agents/atlas.md`).
+  Lets the EIIS conformance checker validate the manifest schema
+  without running the installer.
+
+### Changed
+
+- **`install.sh` header banner** — now reads "EIIS v1.1 conformant".
+- **`EIDOLON_VERSION`** bumped from `1.0.0` to `1.0.4` to match the
+  patch release. Additive host support follows the patch convention
+  (no breaking change to the methodology or to existing host wiring).
+- **`install.manifest.json` emission** — `hosts_wired` now records
+  `"codex"` when the installer is invoked with a host list containing
+  it; `files_written` lists `AGENTS.md` and `.codex/agents/atlas.md`
+  with `role: dispatch`.
+
+### Verified
+
+- `shellcheck -x -S error install.sh` — clean.
+- Smoke: `bash install.sh --hosts codex --non-interactive --force` against
+  an empty tmp dir produces both `AGENTS.md` (marker-bounded) and
+  `.codex/agents/atlas.md` (valid YAML frontmatter); a second invocation
+  produces byte-identical files (except the manifest's `installed_at`).
+- EIIS conformance checker exits 0 against the patched repo.
+
+---
+
 ## [Unreleased] — EIIS-1.0 conformance
 
 ### Added
