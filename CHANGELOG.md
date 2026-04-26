@@ -63,11 +63,34 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **commands/aci.sh** — opt-in `eidolons atlas aci` subcommand that wires the
+  [atlas-aci](https://github.com/Rynaro/atlas-aci) MCP server into a consumer
+  project (claude-code, cursor, copilot). Idempotent install/remove, atomic
+  writes, peer-preserving JSON / YAML-frontmatter merges, and bounded prereq
+  checks (`uv`, `rg`, `python3 >= 3.11`, `atlas-aci`, `jq`, `mikefarah/yq`).
+  Pinned to atlas-aci main @ `ccc40bbd464ecea2eb069c7cdbb0bb1b383e413c`
+  (2026-04-15). Scope: project-local files only — never writes outside `$PWD`.
+  Spec: [Rynaro/eidolons docs/specs/atlas-aci-integration.md](https://github.com/Rynaro/eidolons/pull/20).
+- **tests/** — bats suite covering T6–T29 from the atlas-aci-integration spec
+  (idempotency, peer preservation, host filters, copilot frontmatter handling,
+  gitignore semantics, prereq exits, index ordering, dry-run no-write, and the
+  "no writes outside cwd" boundary). 33 tests organised by concern:
+  `idempotency.bats`, `peer_preservation.bats`, `host_filter.bats`,
+  `copilot.bats`, `gitignore.bats`, `prereqs.bats`, `index.bats`,
+  `operational.bats`. Stubs `uv`, `rg`, `python3`, and `atlas-aci` so CI does
+  not need to install the real prereqs; `jq` and `mikefarah/yq` are real deps.
 - **install.sh** — idempotent installer conforming to EIIS v1.0 §2 interface
   contract: all required flags (`--target`, `--hosts`, `--force`, `--dry-run`,
   `--non-interactive`, `--manifest-only`, `--version`), auto host detection,
   consumer dispatch file creation, manifest emission, token measurement, and
   smoke-test banner.
+
+### Changed
+
+- **install.sh** — now also ships `commands/aci.sh` to
+  `<TARGET>/commands/aci.sh` (preserving the executable bit) so the
+  Eidolons-nexus dispatcher (`cli/src/dispatch_eidolon.sh`) can surface
+  `eidolons atlas aci` once ATLAS is installed in a project.
 - **schemas/install.manifest.v1.json** — JSON Schema draft 2020-12 for the
   `install.manifest.json` artifact emitted by `install.sh`.
 - **hosts/claude-code.md** — per-host wiring quick-reference for Claude Code.

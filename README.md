@@ -90,10 +90,17 @@ atlas/
 │   ├── bounded-aci-spec.md     # ACI primitive specification
 │   └── mcp-server-reference.md # normative MCP tool manifest + enforcement spec
 │
+├── commands/                   # eidolons-nexus subcommands shipped by ATLAS
+│   └── aci.sh                  # `eidolons atlas aci` — wire atlas-aci MCP into a project
+│
 ├── schemas/                    # JSON Schema v2020-12 validators
 │   ├── mission-brief.v1.json
 │   ├── findings.v1.json
 │   └── scout-report.v1.json
+│
+├── tests/                      # bats suite for commands/aci.sh
+│   ├── helpers.bash
+│   └── *.bats                  # T6–T29 from the atlas-aci-integration spec
 │
 └── evals/
     └── canary-missions.md      # 15-mission evaluation set
