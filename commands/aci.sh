@@ -22,6 +22,9 @@
 #     --remove success; dry-run stdout emits CREATE|MODIFY|REMOVE|INDEX.
 #   - Bash 3.2 compatible (P5): no associative arrays, no ${var,,},
 #     no readarray/mapfile, no &>>. Atomic tmpfile + mv everywhere.
+#   - TOML idempotency (codex host): awk slices on [mcp_servers.atlas-aci]
+#     heading, line-bounded by next [*] heading or EOF. Atomic tmpfile+mv.
+#     On detect of a deviant existing body, warn + refuse (R2 mitigation).
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -79,8 +82,8 @@ Options:
   --remove               Remove atlas-aci entries from MCP config in cwd.
                          Idempotent. Does NOT delete .atlas/.
   --host HOST            Restrict to one host: claude-code, cursor,
-                         copilot. Repeat for multiple. Overrides auto-
-                         detection.
+                         copilot, codex. Repeat for multiple. Overrides
+                         auto-detection.
   --dry-run              Print every file that would be created /
                          modified / removed. Touch no disk state.
                          Does not run `atlas-aci index`.
@@ -105,8 +108,8 @@ EOF
 _action_seen=false
 _add_host() {
   case "$1" in
-    claude-code|cursor|copilot) ;;
-    *) exit_usage "Unknown --host value: $1 (want: claude-code, cursor, copilot)" ;;
+    claude-code|cursor|copilot|codex) ;;
+    *) exit_usage "Unknown --host value: $1 (want: claude-code, cursor, copilot, codex)" ;;
   esac
   if [ -z "$HOSTS_EXPLICIT" ]; then
     HOSTS_EXPLICIT="$1"
@@ -138,6 +141,14 @@ while [ "$#" -gt 0 ]; do
     *) exit_usage "Unknown option: $1" ;;
   esac
 done
+
+# ─── Early awk guard (before any awk call in the script body) ─────────────
+# awk is a POSIX baseline but guard defensively so the user gets exit 5
+# (prereq missing) rather than a confusing "127: command not found" crash.
+if ! command -v awk >/dev/null 2>&1; then
+  exit_prereq "atlas-aci prereq missing: 'awk' not on PATH.
+  awk is a POSIX baseline tool — install it via your OS package manager."
+fi
 
 # ─── §4.3 first read: refuse to run if ATLAS is not installed ─────────────
 # This runs BEFORE prereq checks so the user gets the clearest possible
@@ -258,6 +269,9 @@ detect_hosts_mcp() {
   fi
   if [ -d ".cursor" ] || [ -f ".cursorrules" ]; then
     if [ -n "$hosts" ]; then hosts="${hosts},cursor"; else hosts="cursor"; fi
+  fi
+  if [ -d ".codex" ] || [ -f "AGENTS.md" ]; then
+    if [ -n "$hosts" ]; then hosts="${hosts},codex"; else hosts="codex"; fi
   fi
   echo "$hosts"
 }
@@ -572,11 +586,166 @@ copilot_remove_one() {
   ok "Removed atlas-aci from $target"
 }
 
+# ─── Codex host writes: .codex/config.toml (§4.4, D4, D6) ───────────────
+# Idempotency primitive: line-bounded awk slice on [mcp_servers.atlas-aci]
+# table heading. Terminates at the next [*] or [[*]] heading or EOF.
+# Atomic tmpfile + mv identical to JSON/YAML branches. POSIX awk only
+# (no gawk extensions). Bash 3.2 safe throughout.
+#
+# Canonical TOML body the writer produces (3 lines, Unix LF):
+#   [mcp_servers.atlas-aci]
+#   command = "atlas-aci"
+#   args = ["serve", "--repo", "."]
+#
+# R2 mitigation: if the file already contains [mcp_servers.atlas-aci] and
+# its body deviates from the canonical form, refuse and warn. The user
+# must --remove first.
+
+_CODEX_TOML="./.codex/config.toml"
+
+# Canonical body lines (without the table heading).
+_codex_canonical_body() {
+  printf 'command = "atlas-aci"\nargs = ["serve", "--repo", "."]\n'
+}
+
+# _codex_table_body FILE — extracts the body lines of [mcp_servers.atlas-aci]
+# from FILE (if present). Prints only the body (not the heading itself).
+# Prints nothing if the heading is absent. POSIX awk only.
+_codex_table_body() {
+  awk '
+    /^\[mcp_servers\.atlas-aci\]\r?$/ { in_block=1; next }
+    in_block {
+      if (/^\[/) { exit }
+      # Strip CR for CRLF tolerance.
+      gsub(/\r$/, "")
+      print
+    }
+  ' "$1"
+}
+
+# _codex_has_table FILE — returns 0 if [mcp_servers.atlas-aci] heading found.
+_codex_has_table() {
+  grep -q '^\[mcp_servers\.atlas-aci\]' "$1" 2>/dev/null
+}
+
+wire_codex() {
+  local target="$_CODEX_TOML"
+  local existed
+  if [ -f "$target" ]; then existed=true; else existed=false; fi
+
+  if [ "$DRY_RUN" = "true" ]; then
+    if [ "$existed" = "true" ]; then
+      emit_action "MODIFY" "$target"
+    else
+      emit_action "CREATE" "$target"
+    fi
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$target")"
+
+  # R2 mitigation: if the heading already exists and the body deviates
+  # from canonical, refuse rather than silently overwrite user content.
+  if [ "$existed" = "true" ] && _codex_has_table "$target"; then
+    local actual_body canonical_body
+    actual_body="$(_codex_table_body "$target")"
+    canonical_body="$(_codex_canonical_body)"
+    if [ "$actual_body" != "$canonical_body" ]; then
+      warn "codex: .codex/config.toml already has [mcp_servers.atlas-aci] with a non-canonical body."
+      warn "codex: Refusing to overwrite. Run with --remove first, then re-install."
+      warn "codex: Existing body:"
+      printf '%s\n' "$actual_body" >&2
+      return 0
+    fi
+    # Body matches canonical — already correctly installed, nothing to do.
+    info "codex: [mcp_servers.atlas-aci] already correct in $target — skipping"
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp "./.atlas-aci-codex-XXXXXX")" || die "mktemp failed"
+
+  if [ "$existed" = "true" ]; then
+    # Rewrite: copy all lines except any existing [mcp_servers.atlas-aci]
+    # block, then append canonical block. The existing block is absent
+    # (we checked above), so this path just appends after the existing content.
+    # Ensure trailing newline before appending.
+    awk '{ gsub(/\r$/, ""); print }' "$target" > "$tmp" || {
+      rm -f "$tmp"; die "awk copy failed: $target"
+    }
+    # Add trailing newline if the file is non-empty and lacks one.
+    if [ -s "$tmp" ]; then
+      local last_char
+      last_char="$(tail -c 1 "$tmp" | od -An -c | tr -d ' \n')"
+      if [ "$last_char" != "\\n" ]; then
+        printf '\n' >> "$tmp"
+      fi
+    fi
+    {
+      printf '[mcp_servers.atlas-aci]\n'
+      _codex_canonical_body
+    } >> "$tmp" || { rm -f "$tmp"; die "write codex block failed"; }
+    mv "$tmp" "$target" || { rm -f "$tmp"; die "atomic rename failed: $target"; }
+    ok "Merged atlas-aci into $target"
+  else
+    # Fresh file: emit only our block.
+    {
+      printf '[mcp_servers.atlas-aci]\n'
+      _codex_canonical_body
+    } > "$tmp" || { rm -f "$tmp"; die "write failed: $tmp"; }
+    mv "$tmp" "$target" || { rm -f "$tmp"; die "atomic rename failed: $target"; }
+    ok "Created $target"
+  fi
+}
+
+unwire_codex() {
+  local target="$_CODEX_TOML"
+  [ -f "$target" ] || { info "$target absent — nothing to remove"; return 0; }
+
+  if ! _codex_has_table "$target"; then
+    info "$target has no [mcp_servers.atlas-aci] entry — nothing to remove"
+    return 0
+  fi
+
+  if [ "$DRY_RUN" = "true" ]; then
+    emit_action "MODIFY" "$target"
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp "./.atlas-aci-codex-XXXXXX")" || die "mktemp failed"
+
+  # Awk: copy all lines EXCEPT those in the [mcp_servers.atlas-aci] block.
+  # Terminator: next [*] or [[*]] heading or EOF.
+  # CRLF: strip \r on input; emit Unix LF on output.
+  awk '
+    /^\[mcp_servers\.atlas-aci\]\r?$/ { in_block=1; next }
+    in_block {
+      if (/^\[/) { in_block=0 }
+      else { next }
+    }
+    { gsub(/\r$/, ""); print }
+  ' "$target" > "$tmp" || { rm -f "$tmp"; die "awk remove failed: $target"; }
+
+  # Ensure the result ends with a newline (handles no-trailing-newline input).
+  if [ -s "$tmp" ]; then
+    local last_char
+    last_char="$(tail -c 1 "$tmp" | od -An -c | tr -d ' \n')"
+    if [ "$last_char" != "\\n" ]; then
+      printf '\n' >> "$tmp"
+    fi
+  fi
+
+  mv "$tmp" "$target" || { rm -f "$tmp"; die "atomic rename failed: $target"; }
+  ok "Removed atlas-aci from $target"
+}
+
 # ─── Per-host dispatch ────────────────────────────────────────────────────
 apply_host_install() {
   case "$1" in
     claude-code) json_install "./.mcp.json" ;;
     cursor)      json_install "./.cursor/mcp.json" ;;
+    codex)       wire_codex ;;
     copilot)
       # If no .agent.md files exist, skip with info (T14).
       local agents files_found=false
@@ -607,6 +776,7 @@ apply_host_remove() {
   case "$1" in
     claude-code) json_remove "./.mcp.json" ;;
     cursor)      json_remove "./.cursor/mcp.json" ;;
+    codex)       unwire_codex ;;
     copilot)
       local agents
       agents="$(copilot_list_all_agents)"
@@ -674,7 +844,7 @@ main_remove() {
     # Walk all known host files and no-op if absent. This keeps
     # `remove` idempotent even from a mostly-clean state.
     info "No MCP-capable host detected — sweeping known paths anyway"
-    hosts_csv="claude-code,cursor,copilot"
+    hosts_csv="claude-code,cursor,copilot,codex"
   fi
 
   info "Hosts: $hosts_csv"
