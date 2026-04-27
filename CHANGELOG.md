@@ -7,6 +7,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.0.6] - 2026-04-27 — Codex MCP host support in `commands/aci.sh`
+
+### Added
+- **`commands/aci.sh` codex branch** — `wire_codex` and `unwire_codex` register the atlas-aci stdio MCP server in `./.codex/config.toml` under the `[mcp_servers.atlas-aci]` table. Idempotent line-bounded TOML rewrite via POSIX `awk` (no `tomlq`/Python dep), atomic tmpfile + `mv`. Mirrors the existing `wire_claude_code` (`.mcp.json`) / `wire_cursor` / `wire_copilot` pattern.
+- **`--host codex` allow-list entry** — `apply_host_install`, `apply_host_remove`, `detect_hosts_mcp`, the `--dry-run` preview, and the `main_remove` sweep all recognise the codex token. `detect_hosts_mcp` emits `codex` when `.codex/` exists, when `AGENTS.md` exists, or when both `AGENTS.md` and `.github/` are present (matches install.sh's host detection truth table).
+- **Early `awk` prereq guard** — exits 5 with an actionable hint before any `awk` invocation in the script body.
+- **`tests/codex.bats`** — 13 cases covering install/remove/idempotency closure (sha256), peer-table preservation, CRLF input handling, missing-trailing-newline, `[[mcp_servers]]` array-of-tables peers, last-table-in-file, awk-missing exit 5, R2 deviant-body refused-with-warning guard, and dry-run `CREATE`/`MODIFY` preview.
+
 ## [1.0.5] - 2026-04-26 — Re-vendor EIIS v1.1 schema (codex enum)
 
 ### Fixed
