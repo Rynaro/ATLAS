@@ -7,6 +7,30 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.1.1] - 2026-04-28 — atlas-aci container index fix
+
+### Fixed
+- **`commands/aci.sh` atlas-aci pin** — bumped `ATLAS_ACI_PIN` and
+  `ATLAS_ACI_REF` to `8ce17f0e69f135f9324dad718415043276029eb4`, the
+  merge of [atlas-aci#1][aci-1]. Earlier pin (`ccc40bb…`) inherited a
+  Dockerfile that re-resolved transitive deps from PyPI at install time,
+  ignoring `mcp-server/uv.lock`. Upstream `tree-sitter-language-pack`
+  shipped 1.6.3 with a restructured wheel (only a `_native/` subpackage,
+  no top-level `tree_sitter_language_pack` module), so every fresh
+  `eidolons atlas aci --container` build silently produced an image that
+  failed at `atlas-aci index` runtime with `ModuleNotFoundError`. The
+  new pin includes both a tightened `pyproject.toml` constraint
+  (`<1.6.3`) and a lock-respecting Dockerfile build.
+
+### Changed
+- **`EIDOLON_VERSION`** bumped `1.1.0` → `1.1.1`. Patch release: no
+  methodology change, no host-wiring change, no schema change.
+- **`ATLAS_VERSION`** bumped `1.1.0` → `1.1.1` (kept in sync — used as
+  the local image tag `atlas-aci:<ATLAS_VERSION>`, so the bump also
+  cache-busts any stale local image from the broken 1.1.0 build).
+
+[aci-1]: https://github.com/Rynaro/atlas-aci/pull/1
+
 ## [1.0.6] - 2026-04-27 — Codex MCP host support in `commands/aci.sh`
 
 ### Added
