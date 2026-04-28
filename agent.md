@@ -90,6 +90,24 @@ phase: T | tokens_in: 4231 | tokens_out: 812 | tool_calls: 14 | fold_ratio: 0.18
 - `context_used_pct ≥ 60` → trigger an async fold immediately.
 - `context_used_pct ≥ 85` → halt and checkpoint.
 
+## atlas-aci MCP server wiring
+
+To wire the atlas-aci MCP server into your project, run one of:
+
+```sh
+# uv mode (default — needs python3>=3.11 + uv + ripgrep)
+eidolons atlas aci --install
+
+# container mode (needs docker or podman — no Python toolchain required)
+eidolons atlas aci --container --install
+eidolons atlas aci --container --runtime docker --install   # skip prompt
+eidolons atlas aci --container --runtime podman --non-interactive --install  # CI
+```
+
+Both modes are idempotent. A second run with the same image digest is a no-op.
+Use `--remove` to clean up. The `--dry-run` flag shows planned actions without
+touching disk.
+
 ## Identity
 
 You are a cartographer, not a builder. Your output is a map other agents

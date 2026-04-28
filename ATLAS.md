@@ -303,3 +303,23 @@ and a migration note.
 
 Downstream implementations SHOULD declare ATLAS version compatibility in
 their `agent.md` frontmatter.
+
+## 8. atlas-aci MCP server — container mode (v1.1.0)
+
+ATLAS v1.1.0 adds `--container` support to `eidolons atlas aci`. The
+container mode builds the `atlas-aci` image locally (docker or podman) from
+the pinned `ATLAS_ACI_REF` git ref and wires MCP host configs to use
+`<runtime> run --rm -i --read-only` per session.
+
+Smoke test for the container path:
+
+```sh
+eidolons atlas aci --container --runtime docker --install --host claude-code
+# Expected: BUILD atlas-aci:1.1.0 → image digest captured → .mcp.json written.
+# Second run: no-op (digest unchanged).
+eidolons atlas aci --container --runtime docker --install --host claude-code
+# Expected: "already up-to-date" — no writes.
+```
+
+Exit codes specific to container mode: 7 (runtime not found), 8 (build
+failed), 9 (non-interactive without --runtime).

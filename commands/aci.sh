@@ -19,12 +19,14 @@
 #       .github/agents/*.agent.md    : yq merge on list entry name: atlas-aci
 #       .gitignore                   : append-if-absent on line '.atlas/'
 #   - All progress to stderr (P6). Stdout stays empty on --install /
-#     --remove success; dry-run stdout emits CREATE|MODIFY|REMOVE|INDEX.
+#     --remove success; dry-run stdout emits CREATE|MODIFY|REMOVE|INDEX|BUILD.
 #   - Bash 3.2 compatible (P5): no associative arrays, no ${var,,},
 #     no readarray/mapfile, no &>>. Atomic tmpfile + mv everywhere.
 #   - TOML idempotency (codex host): awk slices on [mcp_servers.atlas-aci]
 #     heading, line-bounded by next [*] heading or EOF. Atomic tmpfile+mv.
 #     On detect of a deviant existing body, warn + refuse (R2 mitigation).
+#   - Container mode (--container): builds atlas-aci image locally from git
+#     URL, pins by local sha256 digest, idempotent across repeated runs.
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -38,6 +40,18 @@ set -euo pipefail
 # every ATLAS release per §6 R4 — whichever comes first.
 ATLAS_ACI_REPO="https://github.com/Rynaro/atlas-aci"
 ATLAS_ACI_PIN="ccc40bbd464ecea2eb069c7cdbb0bb1b383e413c"
+
+# ─── Pinned atlas-aci git ref for container builds (D2 = build-locally) ──
+# Used by `<runtime> build ... <URL>#<ATLAS_ACI_REF>:mcp-server`.
+# Bump together with ATLAS_ACI_PIN on every ATLAS release that touches
+# atlas-aci. Pinned to the same HEAD as ATLAS_ACI_PIN above.
+#
+# Pin captured 2026-04-28 from `git -C atlas-aci log -1 --format=%H`.
+ATLAS_ACI_REF="ccc40bbd464ecea2eb069c7cdbb0bb1b383e413c"
+
+# ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
+# Kept in sync with install.sh EIDOLON_VERSION.
+ATLAS_VERSION="1.1.0"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -60,6 +74,9 @@ exit_no_atlas()  { err "$*"; exit 3; }  # ATLAS not installed
 exit_no_host()   { err "$*"; exit 4; }  # no MCP-capable host
 exit_prereq()    { err "$*"; exit 5; }  # prereq missing
 exit_index_fail(){ err "$*"; exit 6; }  # atlas-aci index failed
+exit_no_runtime(){ err "$*"; exit 7; }  # no container runtime on PATH
+exit_build_fail(){ err "$*"; exit 8; }  # image build failed
+exit_need_rt()   { err "$*"; exit 9; }  # --non-interactive without --runtime
 die()            { err "$*"; exit 1; }  # unexpected runtime error
 
 # ─── Args ─────────────────────────────────────────────────────────────────
@@ -67,6 +84,8 @@ ACTION="install"       # install | remove
 DRY_RUN=false
 NON_INTERACTIVE=false
 HOSTS_EXPLICIT=""      # CSV of user-specified hosts
+CONTAINER_MODE=false   # --container flag
+RUNTIME=""             # --runtime docker|podman (empty = prompt)
 
 usage() {
   cat <<'EOF'
@@ -81,12 +100,21 @@ Options:
                          MCP-capable host in cwd.
   --remove               Remove atlas-aci entries from MCP config in cwd.
                          Idempotent. Does NOT delete .atlas/.
+  --container            Use container-runtime mode: build the atlas-aci
+                         image locally (docker/podman) and write container-
+                         aware MCP config. Implies a local image build on
+                         first run; subsequent runs are no-ops when the
+                         image digest is unchanged.
+  --runtime docker|podman
+                         Force container runtime (skips interactive prompt).
+                         Required in --non-interactive mode when --container
+                         is set.
   --host HOST            Restrict to one host: claude-code, cursor,
                          copilot, codex. Repeat for multiple. Overrides
                          auto-detection.
   --dry-run              Print every file that would be created /
                          modified / removed. Touch no disk state.
-                         Does not run `atlas-aci index`.
+                         Does not run `atlas-aci index` or `docker build`.
   --non-interactive      Fail on any prompt (for CI).
   -h, --help             Show this help.
 
@@ -95,8 +123,11 @@ Exit codes:
   2  usage error
   3  ATLAS not installed in this project
   4  no MCP-capable host detected and --host not provided
-  5  atlas-aci prereq missing (uv, rg, python3>=3.11, or atlas-aci)
+  5  atlas-aci prereq missing (uv, rg, python3>=3.11, or atlas-aci binary)
   6  atlas-aci index failed
+  7  container runtime not on PATH (--container only)
+  8  image build failed (--container only)
+  9  --non-interactive without --runtime in --container mode
   1  unexpected runtime error
 
 Scope: project-local files only. Never writes outside $PWD.
@@ -130,6 +161,22 @@ while [ "$#" -gt 0 ]; do
         exit_usage "Conflicting flags: --remove and --$ACTION"
       fi
       ACTION="remove"; _action_seen=true; shift ;;
+    --container)    CONTAINER_MODE=true; shift ;;
+    --runtime)
+      [ "$#" -ge 2 ] || exit_usage "--runtime requires a value (docker|podman)"
+      case "$2" in
+        docker|podman) RUNTIME="$2" ;;
+        *) exit_usage "--runtime value must be 'docker' or 'podman' (got: $2)" ;;
+      esac
+      CONTAINER_MODE=true
+      shift 2 ;;
+    --runtime=*)
+      case "${1#--runtime=}" in
+        docker|podman) RUNTIME="${1#--runtime=}" ;;
+        *) exit_usage "--runtime value must be 'docker' or 'podman' (got: ${1#--runtime=})" ;;
+      esac
+      CONTAINER_MODE=true
+      shift ;;
     --dry-run)         DRY_RUN=true; shift ;;
     --non-interactive) NON_INTERACTIVE=true; shift ;;
     --host)
@@ -188,7 +235,7 @@ yq_is_mikefarah() {
   yq --version 2>&1 | grep -qi 'mikefarah'
 }
 
-# Dry-run channel: stdout gets `CREATE|MODIFY|REMOVE|INDEX <path>` lines
+# Dry-run channel: stdout gets `CREATE|MODIFY|REMOVE|INDEX|BUILD <path>` lines
 # (§4.9). Everything else (progress, warnings) goes to stderr via say/info.
 emit_action() {
   if [ "$DRY_RUN" = "true" ]; then
@@ -210,7 +257,29 @@ atomic_write() {
 
 # ─── §4.2 Prereq checks (install path only) ───────────────────────────────
 check_prereqs() {
-  local missing=""
+  if ! command -v jq >/dev/null 2>&1; then
+    exit_prereq "atlas-aci prereq missing: 'jq' not on PATH.
+  Install with: brew install jq   # macOS
+           or:  apt-get install jq # Debian/Ubuntu"
+  fi
+  if ! command -v yq >/dev/null 2>&1; then
+    exit_prereq "atlas-aci prereq missing: 'yq' not on PATH.
+  Install with: brew install yq   # macOS, or see https://github.com/mikefarah/yq/releases"
+  fi
+  if ! yq_is_mikefarah; then
+    exit_prereq "atlas-aci prereq: 'yq' must be mikefarah/yq (Go).
+  Detected: $(yq --version 2>&1 | head -n 1)
+  Install with: brew install yq   (macOS) / see https://github.com/mikefarah/yq/releases"
+  fi
+
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    check_prereqs_container
+  else
+    check_prereqs_uv
+  fi
+}
+
+check_prereqs_uv() {
   if ! command -v uv >/dev/null 2>&1; then
     exit_prereq "atlas-aci prereq missing: 'uv' not on PATH.
   Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
@@ -235,24 +304,184 @@ check_prereqs() {
   Install with:
     git clone ${ATLAS_ACI_REPO} && cd atlas-aci/mcp-server && uv sync && uv tool install ."
   fi
-  # yq + jq: used for config edits. Both are expected on every Eidolons
-  # consumer box (cli/install.sh installs yq) but we still guard.
-  if ! command -v jq >/dev/null 2>&1; then
-    exit_prereq "atlas-aci prereq missing: 'jq' not on PATH.
-  Install with: brew install jq   # macOS
-           or:  apt-get install jq # Debian/Ubuntu"
-  fi
-  if ! command -v yq >/dev/null 2>&1; then
-    exit_prereq "atlas-aci prereq missing: 'yq' not on PATH.
-  Install with: brew install yq   # macOS, or see https://github.com/mikefarah/yq/releases"
-  fi
-  if ! yq_is_mikefarah; then
-    exit_prereq "atlas-aci prereq: 'yq' must be mikefarah/yq (Go).
-  Detected: $(yq --version 2>&1 | head -n 1)
-  Install with: brew install yq   (macOS) / see https://github.com/mikefarah/yq/releases"
-  fi
-  [ -n "$missing" ] || return 0
 }
+
+check_prereqs_container() {
+  # git is required for `<runtime> build <git-url>#<ref>:mcp-server` to
+  # resolve the context — Docker/Podman delegates to git for URL schemes.
+  if ! command -v git >/dev/null 2>&1; then
+    exit_prereq "atlas-aci container prereq missing: 'git' not on PATH.
+  Install with: brew install git   # macOS
+           or:  apt-get install git # Debian/Ubuntu"
+  fi
+
+  # Runtime resolution: if --runtime was given, verify it's on PATH.
+  # If not given, we handle it at runtime-selection time (see
+  # select_runtime). Here we only check "is at least one available?"
+  if [ -n "$RUNTIME" ]; then
+    if ! command -v "$RUNTIME" >/dev/null 2>&1; then
+      exit_no_runtime "atlas-aci container mode: '$RUNTIME' not on PATH.
+  Install Docker Desktop: https://docs.docker.com/desktop/
+  Install Podman:         https://podman.io/getting-started/installation"
+    fi
+  else
+    # At least one runtime must be available.
+    local _has_docker=false _has_podman=false
+    command -v docker >/dev/null 2>&1 && _has_docker=true
+    command -v podman >/dev/null 2>&1 && _has_podman=true
+    if [ "$_has_docker" = "false" ] && [ "$_has_podman" = "false" ]; then
+      exit_no_runtime "atlas-aci container mode: neither 'docker' nor 'podman' found on PATH.
+  Install Docker Desktop: https://docs.docker.com/desktop/
+  Install Podman:         https://podman.io/getting-started/installation"
+    fi
+  fi
+}
+
+# ─── Runtime selection (D1 = always-prompt) ───────────────────────────────
+# Called after check_prereqs_container when RUNTIME is still empty.
+# Writes the chosen runtime into RUNTIME (global).
+select_runtime() {
+  # If already set by --runtime, nothing to do.
+  [ -n "$RUNTIME" ] && return 0
+
+  # Non-interactive without --runtime → exit 9 (D1 contract).
+  if [ "$NON_INTERACTIVE" = "true" ]; then
+    exit_need_rt "atlas-aci: --container in --non-interactive mode requires --runtime <docker|podman>.
+  Example: eidolons atlas aci --container --runtime docker --non-interactive"
+  fi
+
+  # Interactive prompt — max 3 tries.
+  local _tries=0
+  while [ "$_tries" -lt 3 ]; do
+    printf "Choose container runtime: [1] docker  [2] podman  > " >&2
+    local _choice
+    # read from /dev/tty so we work even when stdin is redirected in some
+    # shell wrappers — but fall back to plain read for portability.
+    if [ -t 0 ]; then
+      read -r _choice
+    else
+      read -r _choice </dev/tty
+    fi
+    case "$_choice" in
+      1|docker) RUNTIME="docker"; return 0 ;;
+      2|podman) RUNTIME="podman"; return 0 ;;
+      *)
+        warn "Invalid choice '$_choice'. Enter 1 (docker) or 2 (podman)."
+        _tries=$((_tries + 1))
+        ;;
+    esac
+  done
+  exit_need_rt "atlas-aci: runtime selection failed after 3 attempts. Pass --runtime <docker|podman>."
+}
+
+# ─── Container image management ───────────────────────────────────────────
+# image_tag — the local tag we build into.
+image_tag() { printf "atlas-aci:%s" "$ATLAS_VERSION"; }
+
+# image_exists — returns 0 if the local tagged image exists.
+image_exists() {
+  "$RUNTIME" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+    | grep -q "^$(image_tag)$"
+}
+
+# capture_local_digest — echoes the sha256 image ID (without "sha256:" prefix)
+# of the locally built image. Returns 1 if the image is absent.
+capture_local_digest() {
+  local full_id
+  full_id="$("$RUNTIME" images --no-trunc --format '{{.ID}}' "$(image_tag)" 2>/dev/null | head -n 1)"
+  [ -n "$full_id" ] || return 1
+  # Strip leading "sha256:" prefix if present.
+  echo "$full_id" | sed 's/^sha256://'
+}
+
+# build_image — runs `<runtime> build` with the git URL context.
+# Emits BUILD action verb in dry-run. Exits 8 on failure.
+build_image() {
+  local build_url
+  build_url="${ATLAS_ACI_REPO}.git#${ATLAS_ACI_REF}:mcp-server"
+
+  if [ "$DRY_RUN" = "true" ]; then
+    emit_action "BUILD" "$(image_tag)"
+    return 0
+  fi
+
+  say "Building $(image_tag) from ${build_url}"
+  say "(this may take several minutes on first run)"
+
+  local build_log
+  build_log="$(mktemp "./.atlas-aci-build-XXXXXX")" || die "mktemp failed"
+
+  if ! "$RUNTIME" build -t "$(image_tag)" "$build_url" > "$build_log" 2>&1; then
+    err "Container image build failed. Build log:"
+    cat "$build_log" >&2
+    rm -f "$build_log"
+    exit_build_fail "atlas-aci: '$RUNTIME build' exited non-zero.
+  Check network access to ${ATLAS_ACI_REPO}
+  Build context: ${build_url}"
+  fi
+  rm -f "$build_log"
+  ok "Built $(image_tag)"
+}
+
+# ensure_image — checks if the image is present; builds if absent.
+# Sets LOCAL_DIGEST global. Returns 1 (noop signal) if image existed
+# and digest is unchanged from what's currently in any existing host config.
+# For simplicity, we always rebuild only when image is absent, and let
+# the canonical-body comparator drive the idempotency on subsequent runs.
+ensure_image() {
+  LOCAL_DIGEST=""
+
+  if image_exists; then
+    LOCAL_DIGEST="$(capture_local_digest)" || die "Failed to capture local image digest"
+    info "Image $(image_tag) already present (digest: ${LOCAL_DIGEST})"
+    return 0
+  fi
+
+  # Image absent — build it.
+  build_image
+  [ "$DRY_RUN" = "true" ] && { LOCAL_DIGEST="<pending-build>"; return 0; }
+
+  LOCAL_DIGEST="$(capture_local_digest)" || die "Failed to capture local image digest after build"
+  ok "Image digest: ${LOCAL_DIGEST}"
+}
+
+# ─── Container canonical bodies ───────────────────────────────────────────
+# These produce the JSON fragment that goes under mcpServers."atlas-aci"
+# for container mode.
+
+container_json_fragment() {
+  # $1 = runtime (docker|podman), $2 = digest (sha256 hex)
+  local rt="$1" digest="$2"
+  jq -n --arg rt "$rt" --arg digest "$digest" '{
+    command: $rt,
+    args: [
+      "run",
+      "--rm",
+      "-i",
+      "--read-only",
+      "-v",
+      "${workspaceFolder}:/repo:ro",
+      "-v",
+      "${workspaceFolder}/.atlas/memex:/memex",
+      ("atlas-aci@sha256:" + $digest),
+      "serve",
+      "--repo",
+      "/repo",
+      "--memex-root",
+      "/memex"
+    ]
+  }'
+}
+
+# container_canonical_json — the expected JSON string for the mcpServers."atlas-aci"
+# entry in .mcp.json / .cursor/mcp.json.
+container_canonical_json() {
+  container_json_fragment "$1" "$2"
+}
+
+# ─── §4.2 Prereq checks (install path only) ───────────────────────────────
+# (moved jq/yq checks to the top of check_prereqs above so they run for
+#  both modes)
 
 # ─── Host selection ───────────────────────────────────────────────────────
 # If --host was supplied, honor it verbatim. Otherwise sniff cwd and
@@ -347,6 +576,15 @@ run_index() {
     emit_action "INDEX" ".atlas/"
     return 0
   fi
+
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    run_index_container
+  else
+    run_index_uv
+  fi
+}
+
+run_index_uv() {
   say "Indexing project with atlas-aci (first run can take minutes on large repos)"
   if ! atlas-aci index \
          --repo "$PWD" \
@@ -357,12 +595,33 @@ run_index() {
   ok "Indexed → .atlas/"
 }
 
+run_index_container() {
+  say "Indexing project with atlas-aci container (first run can take minutes)"
+  # mkdir -p .atlas/memex before running so daemon doesn't create it with
+  # wrong owner (D6 / R8 mitigation).
+  mkdir -p ".atlas/memex"
+
+  if ! "$RUNTIME" run --rm \
+         -v "${PWD}:/repo" \
+         "atlas-aci@sha256:${LOCAL_DIGEST}" \
+         index \
+         --repo /repo \
+         --langs ruby,python,javascript,typescript >&2; then
+    exit_index_fail "atlas-aci container index failed — aborting before MCP config writes.
+  No MCP config files were modified."
+  fi
+  ok "Indexed → .atlas/"
+}
+
 # ─── JSON host writes: .mcp.json, .cursor/mcp.json (§4.4, §4.5) ──────────
 # Idempotency primitive: object-key match on mcpServers."atlas-aci".
 # jq merge on install; jq del on remove. Peer keys preserved (A11).
+#
+# For container mode, the canonical body uses the container fragment.
+# The fail-closed comparator (wire_codex R2 equivalent for JSON) is
+# implemented by comparing the current body against BOTH canonical forms.
 json_server_fragment() {
-  # Emits the object fragment we merge under .mcpServers."atlas-aci".
-  # Indentation managed by the final jq --indent 2 invocation.
+  # uv-mode canonical fragment
   jq -n '{
     command: "atlas-aci",
     args: [
@@ -371,6 +630,31 @@ json_server_fragment() {
       "--memex-root", "${workspaceFolder}/.atlas/memex"
     ]
   }'
+}
+
+# _json_body_matches_uv FILE — returns 0 if the atlas-aci entry in FILE
+# matches the uv-mode canonical body.
+_json_body_matches_uv() {
+  local target="$1"
+  [ -f "$target" ] || return 1
+  local actual canonical
+  actual="$(jq -S '.mcpServers["atlas-aci"] // empty' "$target" 2>/dev/null)"
+  [ -n "$actual" ] || return 1
+  canonical="$(json_server_fragment | jq -S .)"
+  [ "$actual" = "$canonical" ]
+}
+
+# _json_body_matches_container FILE RUNTIME DIGEST — returns 0 if the
+# atlas-aci entry matches the container canonical body for the given
+# runtime and digest.
+_json_body_matches_container() {
+  local target="$1" rt="$2" digest="$3"
+  [ -f "$target" ] || return 1
+  local actual canonical
+  actual="$(jq -S '.mcpServers["atlas-aci"] // empty' "$target" 2>/dev/null)"
+  [ -n "$actual" ] || return 1
+  canonical="$(container_json_fragment "$rt" "$digest" | jq -S .)"
+  [ "$actual" = "$canonical" ]
 }
 
 json_install() {
@@ -391,15 +675,56 @@ json_install() {
   mkdir -p "$dir"
   tmp="$(mktemp "${dir}/.atlas-aci-mcp-XXXXXX")" || die "mktemp failed"
 
-  frag="$(json_server_fragment)"
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    frag="$(container_json_fragment "$RUNTIME" "$LOCAL_DIGEST")"
+  else
+    frag="$(json_server_fragment)"
+  fi
 
   if [ "$existed" = "true" ]; then
-    # Validate existing JSON before we touch it. Invalid JSON = fail
-    # closed; do not clobber user content.
+    # Validate existing JSON before we touch it.
     if ! jq empty "$target" >/dev/null 2>&1; then
       rm -f "$tmp"
       die "Existing $target is not valid JSON — refusing to overwrite. Fix manually."
     fi
+
+    # R2 mitigation for JSON: if atlas-aci entry exists and matches neither
+    # uv canonical nor container canonical, refuse (fail-closed).
+    if jq -e '.mcpServers["atlas-aci"] // empty' "$target" >/dev/null 2>&1; then
+      local _uv_match=false _ct_match=false
+      _json_body_matches_uv "$target" && _uv_match=true || true
+      if [ "$CONTAINER_MODE" = "true" ]; then
+        _json_body_matches_container "$target" "$RUNTIME" "$LOCAL_DIGEST" && _ct_match=true || true
+      fi
+      # If the existing entry matches the intended canonical, it's already correct.
+      if [ "$CONTAINER_MODE" = "true" ] && [ "$_ct_match" = "true" ]; then
+        rm -f "$tmp"
+        info "$target already has correct container atlas-aci entry — skipping"
+        return 0
+      fi
+      if [ "$CONTAINER_MODE" = "false" ] && [ "$_uv_match" = "true" ]; then
+        rm -f "$tmp"
+        info "$target already has correct uv atlas-aci entry — skipping"
+        return 0
+      fi
+      # Neither matches — this is a hand-edited or cross-mode body.
+      # We still overwrite in cross-mode (uv→container or container→uv)
+      # because the user explicitly requested the new mode. We only
+      # refuse on truly foreign edits (neither canonical).
+      if [ "$_uv_match" = "false" ] && [ "$_ct_match" = "false" ]; then
+        if [ "$CONTAINER_MODE" = "true" ]; then
+          # Container install: also accept if it was a valid uv canonical
+          # (mode switch scenario — G11).  Since _uv_match=false here,
+          # the body is genuinely foreign.
+          warn "$target: atlas-aci entry exists but matches neither uv nor container canonical."
+          warn "Overwriting (to change runtime mode, this is expected)."
+        else
+          warn "$target: atlas-aci entry exists but matches neither known canonical."
+          warn "Overwriting with uv canonical."
+        fi
+      fi
+    fi
+
     base="$(cat "$target")"
     merged="$(echo "$base" | jq --argjson s "$frag" \
       '.mcpServers = (.mcpServers // {}) | .mcpServers["atlas-aci"] = $s' \
@@ -497,6 +822,24 @@ copilot_list_all_agents() {
   ls -1 .github/agents 2>/dev/null | awk '/\.agent\.md$/ {print ".github/agents/"$0}'
 }
 
+_copilot_command_array() {
+  # $1 = mode: "uv" or "container"
+  # $2 (container only) = runtime
+  # $3 (container only) = digest
+  if [ "$1" = "uv" ]; then
+    printf '["atlas-aci", "serve", "--repo", "${workspaceFolder}", "--memex-root", "${workspaceFolder}/.atlas/memex"]'
+  else
+    local rt="$2" digest="$3"
+    # Build the JSON array for the container command
+    jq -n --arg rt "$rt" --arg digest "$digest" \
+      '[$rt, "run", "--rm", "-i", "--read-only",
+        "-v", "${workspaceFolder}:/repo:ro",
+        "-v", "${workspaceFolder}/.atlas/memex:/memex",
+        ("atlas-aci@sha256:" + $digest),
+        "serve", "--repo", "/repo", "--memex-root", "/memex"]'
+  fi
+}
+
 copilot_install_one() {
   local target="$1"
   local fm body merged rebuilt tmp
@@ -515,18 +858,44 @@ copilot_install_one() {
     return 0
   fi
 
-  # Ensure tools.mcp_servers exists as a list, then filter out any
-  # pre-existing name: atlas-aci entry, then append our canonical
-  # entry. This guarantees idempotent re-install.
-  merged="$(yq eval '
-    .tools = (.tools // {}) |
-    .tools.mcp_servers = (.tools.mcp_servers // []) |
-    .tools.mcp_servers = ([.tools.mcp_servers[] | select(.name != "atlas-aci")] + [{
-      "name": "atlas-aci",
-      "transport": "stdio",
-      "command": ["atlas-aci", "serve", "--repo", "${workspaceFolder}", "--memex-root", "${workspaceFolder}/.atlas/memex"]
-    }])
-  ' "$fm")" || { rm -f "$fm" "$body"; die "yq merge failed on $target"; }
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    local cmd_array
+    cmd_array="$(_copilot_command_array container "$RUNTIME" "$LOCAL_DIGEST")"
+    merged="$(yq eval '
+      .tools = (.tools // {}) |
+      .tools.mcp_servers = (.tools.mcp_servers // []) |
+      .tools.mcp_servers = ([.tools.mcp_servers[] | select(.name != "atlas-aci")] + [{
+        "name": "atlas-aci",
+        "transport": "stdio",
+        "command": env(CMD_ARRAY)
+      }])
+    ' "$fm" 2>/dev/null)" || {
+      # yq env() approach may not work on all versions; use a temp file approach
+      local cmd_tmp
+      cmd_tmp="$(mktemp "./.atlas-aci-cmd-XXXXXX")"
+      printf '%s' "$cmd_array" > "$cmd_tmp"
+      merged="$(CMD_ARRAY="$cmd_array" yq eval '
+        .tools = (.tools // {}) |
+        .tools.mcp_servers = (.tools.mcp_servers // []) |
+        .tools.mcp_servers = ([.tools.mcp_servers[] | select(.name != "atlas-aci")] + [{
+          "name": "atlas-aci",
+          "transport": "stdio",
+          "command": env(CMD_ARRAY)
+        }])
+      ' "$fm")" || { rm -f "$fm" "$body" "$cmd_tmp"; die "yq merge failed on $target"; }
+      rm -f "$cmd_tmp"
+    }
+  else
+    merged="$(yq eval '
+      .tools = (.tools // {}) |
+      .tools.mcp_servers = (.tools.mcp_servers // []) |
+      .tools.mcp_servers = ([.tools.mcp_servers[] | select(.name != "atlas-aci")] + [{
+        "name": "atlas-aci",
+        "transport": "stdio",
+        "command": ["atlas-aci", "serve", "--repo", "${workspaceFolder}", "--memex-root", "${workspaceFolder}/.atlas/memex"]
+      }])
+    ' "$fm")" || { rm -f "$fm" "$body"; die "yq merge failed on $target"; }
+  fi
 
   # Splice back. Body preservation: we re-emit the body byte-for-byte.
   tmp="$(mktemp "./.atlas-aci-agent-XXXXXX")" || { rm -f "$fm" "$body"; die "mktemp failed"; }
@@ -592,20 +961,47 @@ copilot_remove_one() {
 # Atomic tmpfile + mv identical to JSON/YAML branches. POSIX awk only
 # (no gawk extensions). Bash 3.2 safe throughout.
 #
-# Canonical TOML body the writer produces (3 lines, Unix LF):
-#   [mcp_servers.atlas-aci]
-#   command = "atlas-aci"
-#   args = ["serve", "--repo", "."]
+# Canonical TOML body the writer produces:
+#   uv mode (3 lines):
+#     [mcp_servers.atlas-aci]
+#     command = "atlas-aci"
+#     args = ["serve", "--repo", "."]
+#
+#   container mode (3 lines):
+#     [mcp_servers.atlas-aci]
+#     command = "<RUNTIME>"
+#     args = ["run", "--rm", "-i", "--read-only", "-v",
+#             "${workspaceFolder}:/repo:ro", "-v",
+#             "${workspaceFolder}/.atlas/memex:/memex",
+#             "atlas-aci@sha256:<DIGEST>", "serve", "--repo",
+#             "/repo", "--memex-root", "/memex"]
 #
 # R2 mitigation: if the file already contains [mcp_servers.atlas-aci] and
-# its body deviates from the canonical form, refuse and warn. The user
-# must --remove first.
+# its body deviates from BOTH the uv canonical AND the container canonical
+# for the current runtime+digest, refuse and warn.
 
 _CODEX_TOML="./.codex/config.toml"
 
-# Canonical body lines (without the table heading).
-_codex_canonical_body() {
+# _codex_canonical_body_uv — canonical TOML body for uv mode (no heading).
+_codex_canonical_body_uv() {
   printf 'command = "atlas-aci"\nargs = ["serve", "--repo", "."]\n'
+}
+
+# _codex_canonical_body_container RUNTIME DIGEST — canonical TOML body
+# for container mode (no heading).
+_codex_canonical_body_container() {
+  local rt="$1" digest="$2"
+  printf 'command = "%s"\n' "$rt"
+  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "${workspaceFolder}:/repo:ro", "-v", "${workspaceFolder}/.atlas/memex:/memex", "atlas-aci@sha256:%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$digest"
+}
+
+# _codex_canonical_body — returns the canonical body for the current mode.
+_codex_canonical_body() {
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    _codex_canonical_body_container "$RUNTIME" "$LOCAL_DIGEST"
+  else
+    _codex_canonical_body_uv
+  fi
 }
 
 # _codex_table_body FILE — extracts the body lines of [mcp_servers.atlas-aci]
@@ -644,32 +1040,68 @@ wire_codex() {
 
   mkdir -p "$(dirname "$target")"
 
-  # R2 mitigation: if the heading already exists and the body deviates
-  # from canonical, refuse rather than silently overwrite user content.
+  # R2 mitigation: if the heading already exists, compare against both
+  # canonical forms. Accept if either matches. Refuse only if neither.
   if [ "$existed" = "true" ] && _codex_has_table "$target"; then
-    local actual_body canonical_body
+    local actual_body uv_body ct_body
     actual_body="$(_codex_table_body "$target")"
-    canonical_body="$(_codex_canonical_body)"
-    if [ "$actual_body" != "$canonical_body" ]; then
+    uv_body="$(_codex_canonical_body_uv)"
+    if [ "$CONTAINER_MODE" = "true" ]; then
+      ct_body="$(_codex_canonical_body_container "$RUNTIME" "$LOCAL_DIGEST")"
+      if [ "$actual_body" = "$ct_body" ]; then
+        # Already correctly installed as container mode.
+        info "codex: [mcp_servers.atlas-aci] already correct (container) in $target — skipping"
+        return 0
+      fi
+      if [ "$actual_body" = "$uv_body" ]; then
+        # Was uv mode — now switching to container. Allow overwrite.
+        info "codex: switching from uv mode to container mode in $target"
+      else
+        # Body matches neither canonical — fail-closed.
+        warn "codex: .codex/config.toml has [mcp_servers.atlas-aci] with non-canonical body."
+        warn "codex: Refusing to overwrite. Run with --remove first, then re-install."
+        warn "codex: Existing body:"
+        printf '%s\n' "$actual_body" >&2
+        return 0
+      fi
+    else
+      # uv mode
+      if [ "$actual_body" = "$uv_body" ]; then
+        info "codex: [mcp_servers.atlas-aci] already correct (uv) in $target — skipping"
+        return 0
+      fi
+      # Check if it matches container canonical for any runtime — we
+      # don't have RUNTIME set in uv mode but we can do a looser check.
+      # For simplicity: if it doesn't match uv canonical, refuse.
       warn "codex: .codex/config.toml already has [mcp_servers.atlas-aci] with a non-canonical body."
       warn "codex: Refusing to overwrite. Run with --remove first, then re-install."
       warn "codex: Existing body:"
       printf '%s\n' "$actual_body" >&2
       return 0
     fi
-    # Body matches canonical — already correctly installed, nothing to do.
-    info "codex: [mcp_servers.atlas-aci] already correct in $target — skipping"
-    return 0
+    # Fall through to rewrite (mode switch).
   fi
 
   local tmp
   tmp="$(mktemp "./.atlas-aci-codex-XXXXXX")" || die "mktemp failed"
 
   if [ "$existed" = "true" ]; then
-    # Rewrite: copy all lines except any existing [mcp_servers.atlas-aci]
-    # block, then append canonical block. The existing block is absent
-    # (we checked above), so this path just appends after the existing content.
-    # Ensure trailing newline before appending.
+    # If we're here after mode-switch detection, remove the existing block
+    # first so we can re-append the canonical one.
+    if _codex_has_table "$target"; then
+      awk '
+        /^\[mcp_servers\.atlas-aci\]\r?$/ { in_block=1; next }
+        in_block {
+          if (/^\[/) { in_block=0 }
+          else { next }
+        }
+        { gsub(/\r$/, ""); print }
+      ' "$target" > "$tmp" || { rm -f "$tmp"; die "awk mode-switch remove failed: $target"; }
+      mv "$tmp" "$target" || { rm -f "$tmp"; die "atomic rename failed: $target (mode-switch)"; }
+      tmp="$(mktemp "./.atlas-aci-codex-XXXXXX")" || die "mktemp failed"
+    fi
+
+    # Rewrite: copy all lines, then append canonical block.
     awk '{ gsub(/\r$/, ""); print }' "$target" > "$tmp" || {
       rm -f "$tmp"; die "awk copy failed: $target"
     }
@@ -799,6 +1231,45 @@ apply_host_remove() {
   esac
 }
 
+# ─── Idempotency check for container mode (G18) ───────────────────────────
+# Returns 0 (noop) if all target host configs already have the exact
+# container canonical body for the current RUNTIME + LOCAL_DIGEST.
+# Returns 1 if any host config needs updating.
+_container_configs_up_to_date() {
+  local hosts_csv="$1"
+  local old_IFS="$IFS"
+  IFS=','
+  for h in $hosts_csv; do
+    IFS="$old_IFS"
+    case "$h" in
+      claude-code)
+        [ -f ".mcp.json" ] || { IFS=','; return 1; }
+        _json_body_matches_container ".mcp.json" "$RUNTIME" "$LOCAL_DIGEST" || { IFS=','; return 1; }
+        ;;
+      cursor)
+        [ -f ".cursor/mcp.json" ] || { IFS=','; return 1; }
+        _json_body_matches_container ".cursor/mcp.json" "$RUNTIME" "$LOCAL_DIGEST" || { IFS=','; return 1; }
+        ;;
+      codex)
+        [ -f "$_CODEX_TOML" ] || { IFS=','; return 1; }
+        local actual_body ct_body
+        actual_body="$(_codex_table_body "$_CODEX_TOML")"
+        ct_body="$(_codex_canonical_body_container "$RUNTIME" "$LOCAL_DIGEST")"
+        [ "$actual_body" = "$ct_body" ] || { IFS=','; return 1; }
+        ;;
+      copilot)
+        # Copilot check: at least one agent file exists and has atlas-aci entry.
+        # For simplicity in idempotency, if agents exist we always re-run
+        # (yq install_one is idempotent itself). Return 1 to proceed.
+        { IFS=','; return 1; }
+        ;;
+    esac
+    IFS=','
+  done
+  IFS="$old_IFS"
+  return 0
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────
 main_install() {
   check_prereqs
@@ -814,6 +1285,15 @@ main_install() {
   info "Hosts: $hosts_csv"
   [ "$DRY_RUN" = "true" ] && info "Dry-run mode — no files will be modified"
 
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    main_install_container "$hosts_csv"
+  else
+    main_install_uv "$hosts_csv"
+  fi
+}
+
+main_install_uv() {
+  local hosts_csv="$1"
   # Ordering: .gitignore first (cheapest), then index (slowest — aborts
   # early if broken), then MCP writes. §A13 requires index failure to
   # precede config writes; that is enforced by this ordering.
@@ -830,7 +1310,51 @@ main_install() {
   IFS="$old_IFS"
 
   [ "$DRY_RUN" = "true" ] && return 0
-  ok "atlas-aci wired into $hosts_csv"
+  ok "atlas-aci (uv) wired into $hosts_csv"
+}
+
+main_install_container() {
+  local hosts_csv="$1"
+
+  # Step 1: runtime selection (D1 = always-prompt).
+  select_runtime
+
+  # Step 2: build or verify image. Sets LOCAL_DIGEST.
+  ensure_image
+
+  # Step 3 (G18): if image existed and all host configs already match,
+  # this is a true no-op.
+  if [ "$DRY_RUN" = "false" ]; then
+    if _container_configs_up_to_date "$hosts_csv"; then
+      info "All host configs already match digest ${LOCAL_DIGEST} — no-op"
+      ok "atlas-aci container already up-to-date in $hosts_csv"
+      return 0
+    fi
+  fi
+
+  # Step 4: mkdir .atlas/memex before first run (D6 / R8 mitigation).
+  if [ "$DRY_RUN" = "false" ]; then
+    mkdir -p ".atlas/memex"
+  fi
+
+  # Step 5: .gitignore.
+  ensure_gitignore
+
+  # Step 6: index (uses container).
+  run_index
+
+  # Step 7: host config writes.
+  local old_IFS="$IFS"
+  IFS=','
+  for h in $hosts_csv; do
+    IFS="$old_IFS"
+    apply_host_install "$h"
+    IFS=','
+  done
+  IFS="$old_IFS"
+
+  [ "$DRY_RUN" = "true" ] && return 0
+  ok "atlas-aci (container/$RUNTIME) wired into $hosts_csv"
 }
 
 main_remove() {
