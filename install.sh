@@ -4,7 +4,7 @@
 set -euo pipefail
 
 EIDOLON_NAME="atlas"
-EIDOLON_VERSION="1.1.1"
+EIDOLON_VERSION="1.2.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
