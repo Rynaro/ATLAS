@@ -57,7 +57,7 @@ case "\$1" in
     fi
     # Repository:Tag format query.
     if [ -f "${sentinel}" ]; then
-      printf 'atlas-aci:1.1.0\n'
+      printf 'atlas-aci:1.1.1\n'
     fi
     exit 0
     ;;

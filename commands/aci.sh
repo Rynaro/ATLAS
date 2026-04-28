@@ -35,11 +35,13 @@ set -euo pipefail
 # When atlas-aci cuts its first tagged release, bump to a version string
 # and revisit D4 (see §9 follow-up F1 in the spec).
 #
-# Pin captured 2026-04-15 from `gh api repos/Rynaro/atlas-aci/commits/main`.
+# Pin captured 2026-04-28 from `gh api repos/Rynaro/atlas-aci/commits/main`
+# (post-merge of atlas-aci#1, which lock-respects transitive deps in the
+# production Dockerfile and pins tree-sitter-language-pack <1.6.3).
 # Revisit when F1 triggers (atlas-aci cuts its first tagged release) or on
 # every ATLAS release per §6 R4 — whichever comes first.
 ATLAS_ACI_REPO="https://github.com/Rynaro/atlas-aci"
-ATLAS_ACI_PIN="ccc40bbd464ecea2eb069c7cdbb0bb1b383e413c"
+ATLAS_ACI_PIN="8ce17f0e69f135f9324dad718415043276029eb4"
 
 # ─── Pinned atlas-aci git ref for container builds (D2 = build-locally) ──
 # Used by `<runtime> build ... <URL>#<ATLAS_ACI_REF>:mcp-server`.
@@ -47,11 +49,11 @@ ATLAS_ACI_PIN="ccc40bbd464ecea2eb069c7cdbb0bb1b383e413c"
 # atlas-aci. Pinned to the same HEAD as ATLAS_ACI_PIN above.
 #
 # Pin captured 2026-04-28 from `git -C atlas-aci log -1 --format=%H`.
-ATLAS_ACI_REF="ccc40bbd464ecea2eb069c7cdbb0bb1b383e413c"
+ATLAS_ACI_REF="8ce17f0e69f135f9324dad718415043276029eb4"
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.1.0"
+ATLAS_VERSION="1.1.1"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
