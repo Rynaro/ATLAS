@@ -57,7 +57,7 @@ case "\$1" in
     fi
     # Repository:Tag format query.
     if [ -f "${sentinel}" ]; then
-      printf 'atlas-aci:1.1.1\n'
+      printf 'atlas-aci:1.2.0\n'
     fi
     exit 0
     ;;
@@ -618,4 +618,206 @@ EOF
     printf '%s\n' "$output"
     return 1
   }
+}
+
+# ─── `index` subcommand ───────────────────────────────────────────────────
+# IDX-1 .. IDX-9 cover the new `eidolons atlas aci index` action. The
+# command re-runs atlas-aci index against the current project — host or
+# container mode auto-detected; no image build, no MCP/.gitignore writes.
+
+@test "IDX-1: positional 'index' runs atlas-aci index in host mode" {
+  setup_fresh_project
+  install_stub "atlas-aci" 0 'case "$1" in
+  index) shift; mkdir -p ./.atlas && printf "regenerated: true\n" > ./.atlas/manifest.yaml ;;
+  *) : ;;
+esac'
+
+  run_aci index
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"Mode: host"* ]] || {
+    echo "Expected host-mode banner:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"Re-index complete"* ]] || {
+    echo "Expected Re-index complete:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  # atlas-aci stub was invoked with `index` as first arg.
+  grep -q '^index' "$BATS_TEST_TMPDIR/atlas-aci.log" || {
+    echo "atlas-aci index was not invoked"
+    cat "$BATS_TEST_TMPDIR/atlas-aci.log" 2>/dev/null || true
+    return 1
+  }
+}
+
+@test "IDX-2: --index flag form is equivalent to positional index" {
+  setup_fresh_project
+  install_stub "atlas-aci" 0 'case "$1" in
+  index) shift; mkdir -p ./.atlas && printf "ok\n" > ./.atlas/manifest.yaml ;;
+  *) : ;;
+esac'
+
+  run_aci --index
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  grep -q '^index' "$BATS_TEST_TMPDIR/atlas-aci.log"
+}
+
+@test "IDX-3: index in container mode auto-detects when atlas-aci not on PATH" {
+  setup_fresh_project
+  install_docker_stub_prebuilt
+  # Deliberately no install_stub "atlas-aci" — auto-detect must fall back
+  # to container.
+
+  run_aci index
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.0)"* ]] || {
+    echo "Expected container-mode banner:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  # docker run must have been called with `index`.
+  grep -q '^run.*index' "$BATS_TEST_TMPDIR/docker.log" || {
+    echo "docker run index was not invoked:"
+    cat "$BATS_TEST_TMPDIR/docker.log" 2>/dev/null || true
+    return 1
+  }
+  # No build during index — image was already prebuilt.
+  local build_count
+  build_count="$(docker_build_count)"
+  [ "$build_count" -eq 0 ] || {
+    echo "docker build was called $build_count times during index"
+    return 1
+  }
+}
+
+@test "IDX-4: index with no atlas-aci installed anywhere → exit 5" {
+  setup_fresh_project
+  # No atlas-aci stub, no docker/podman stub. Auto-detect must fail
+  # with the prereq-missing exit code.
+
+  run_aci index
+  [ "$status" -eq 5 ] || {
+    echo "Expected exit 5 (prereq), got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"cannot find an installed atlas-aci"* ]] || {
+    echo "Expected actionable error message:"
+    printf '%s\n' "$output"
+    return 1
+  }
+}
+
+@test "IDX-5: index forces re-index even when .atlas/manifest.yaml exists (bypasses install gate)" {
+  setup_fresh_project
+  install_stub "atlas-aci" 0 'case "$1" in
+  index) shift; mkdir -p ./.atlas && printf "regenerated: true\n" > ./.atlas/manifest.yaml ;;
+  *) : ;;
+esac'
+
+  # Pre-existing manifest must NOT short-circuit the index action.
+  mkdir -p ./.atlas
+  printf 'stale: true\n' > ./.atlas/manifest.yaml
+
+  run_aci index
+  [ "$status" -eq 0 ]
+  # atlas-aci was actually invoked (gate bypassed).
+  grep -q '^index' "$BATS_TEST_TMPDIR/atlas-aci.log" || {
+    echo "Index gate was not bypassed — atlas-aci index never ran:"
+    cat "$BATS_TEST_TMPDIR/atlas-aci.log" 2>/dev/null || echo "(no log)"
+    return 1
+  }
+  # Manifest was rewritten (stub overwrites it).
+  grep -q 'regenerated' ./.atlas/manifest.yaml
+}
+
+@test "IDX-6: index --dry-run emits INDEX and touches no disk state" {
+  setup_fresh_project
+  install_stub "atlas-aci" 0 ':'
+
+  run_aci index --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"INDEX"*".atlas/"* ]] || {
+    echo "Expected INDEX action verb in dry-run output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  # No atlas-aci invocation during dry-run.
+  [ ! -f "$BATS_TEST_TMPDIR/atlas-aci.log" ] \
+    || ! grep -q '^index' "$BATS_TEST_TMPDIR/atlas-aci.log" || {
+      echo "atlas-aci was invoked during --dry-run"
+      return 1
+  }
+}
+
+@test "IDX-7: index does NOT write MCP config or .gitignore" {
+  setup_fresh_project
+  seed_claude_host
+  install_stub "atlas-aci" 0 'case "$1" in
+  index) shift; mkdir -p ./.atlas && printf "ok\n" > ./.atlas/manifest.yaml ;;
+  *) : ;;
+esac'
+
+  # Pre-condition: no .mcp.json, no .gitignore.
+  [ ! -f .mcp.json ]
+  [ ! -f .gitignore ]
+
+  run_aci index
+  [ "$status" -eq 0 ]
+
+  # Post-condition: still no .mcp.json, still no .gitignore. Index is a
+  # pure data refresh — host wiring stays exactly as the user left it.
+  [ ! -f .mcp.json ] || {
+    echo ".mcp.json was created by index (should be install's job only)"
+    return 1
+  }
+  [ ! -f .gitignore ] || {
+    echo ".gitignore was created by index (should be install's job only)"
+    return 1
+  }
+}
+
+@test "IDX-8: index --container --runtime docker forces container mode even if atlas-aci is on PATH" {
+  setup_fresh_project
+  install_stub "atlas-aci" 0 ':'      # host binary present …
+  install_docker_stub_prebuilt        # … and docker prebuilt image present.
+
+  # User explicitly forces container mode → should ignore the host stub.
+  run_aci index --container --runtime docker
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Mode: container"* ]]
+  grep -q '^run.*index' "$BATS_TEST_TMPDIR/docker.log"
+  # Host atlas-aci must NOT have been called.
+  [ ! -s "$BATS_TEST_TMPDIR/atlas-aci.log" ] || {
+    echo "atlas-aci host binary was called despite --container override"
+    cat "$BATS_TEST_TMPDIR/atlas-aci.log"
+    return 1
+  }
+}
+
+@test "IDX-9: positional index conflicts with --remove → exit 2" {
+  setup_fresh_project
+  install_stub "atlas-aci" 0 ':'
+
+  run_aci index --remove
+  [ "$status" -eq 2 ] || {
+    echo "Expected exit 2 for conflicting actions, got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"Conflicting actions"* ]]
 }

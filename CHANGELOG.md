@@ -7,6 +7,41 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.2.0] - 2026-04-28 — `eidolons atlas aci index` subcommand
+
+### Added
+- **`commands/aci.sh` index action** — new positional subcommand
+  `eidolons atlas aci index` (and equivalent `--index` flag) re-runs
+  `atlas-aci index` against the current project without rebuilding
+  the image, modifying MCP configs, or touching `.gitignore`. Bypasses
+  the install-side `.atlas/manifest.yaml` short-circuit (T24) so
+  re-indexing always actually re-indexes — the install path keeps the
+  gate via the new `force` parameter on `run_index`.
+- **Mode auto-detection for `index`** — `detect_index_mode` probes
+  `command -v atlas-aci` first (host mode preferred: simpler, faster,
+  no daemon dep), then falls back to `docker images` / `podman images`
+  for `atlas-aci:<ATLAS_VERSION>` (container mode). Errors with exit 5
+  and an actionable hint when neither is available. `--container` /
+  `--runtime` flags override auto-detection.
+- **`tests/aci.bats` IDX-1..IDX-9** — nine new bats cases covering
+  positional vs flag form, host-mode happy path, container-mode
+  auto-detect, prereq-missing exit, gate bypass on existing manifest,
+  dry-run no-op, no MCP/.gitignore writes, explicit `--container`
+  override, and conflict between positional `index` and `--remove`.
+
+### Changed
+- **`EIDOLON_VERSION`** bumped `1.1.1` → `1.2.0`. Minor release: new
+  public CLI surface (the `index` action), no breaking change to
+  existing `install` / `remove` flows, no methodology change.
+- **`ATLAS_VERSION`** bumped `1.1.1` → `1.2.0` in lock-step. Local
+  image tag follows: `atlas-aci:1.2.0`.
+- **`run_index` signature** — now accepts an optional `force` boolean
+  (default `false`). Install path passes nothing (preserves T24
+  idempotency); index action passes `true`.
+- **Usage banner reorganised** — actions now documented as positional
+  subcommands (`install` / `index` / `remove`) with flag forms noted
+  underneath, matching how most CLIs document subcommand-style APIs.
+
 ## [1.1.1] - 2026-04-28 — atlas-aci container index fix
 
 ### Fixed

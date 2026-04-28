@@ -53,7 +53,7 @@ ATLAS_ACI_REF="8ce17f0e69f135f9324dad718415043276029eb4"
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.1.1"
+ATLAS_VERSION="1.2.0"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -82,7 +82,7 @@ exit_need_rt()   { err "$*"; exit 9; }  # --non-interactive without --runtime
 die()            { err "$*"; exit 1; }  # unexpected runtime error
 
 # ─── Args ─────────────────────────────────────────────────────────────────
-ACTION="install"       # install | remove
+ACTION="install"       # install | remove | index
 DRY_RUN=false
 NON_INTERACTIVE=false
 HOSTS_EXPLICIT=""      # CSV of user-specified hosts
@@ -93,27 +93,36 @@ usage() {
   cat <<'EOF'
 eidolons atlas aci — wire atlas-aci MCP server into this project
 
-Usage: eidolons atlas aci [OPTIONS]
+Usage: eidolons atlas aci [ACTION] [OPTIONS]
+
+Actions (positional, mutually exclusive — flag forms also accepted):
+  install   (default) Verify prereqs, run atlas-aci index, append .atlas/
+            to .gitignore, and write MCP config for atlas-aci into every
+            detected MCP-capable host in cwd.
+  index     Re-run atlas-aci index against the current project. Reuses
+            the existing installation — does NOT rebuild the image, does
+            NOT modify MCP configs or .gitignore. Mode (host vs
+            container) is auto-detected from what's installed locally;
+            override with --container / --runtime.
+  remove    Remove atlas-aci entries from MCP config in cwd. Idempotent.
+            Does NOT delete .atlas/.
 
 Options:
-  --install              (default) Verify prereqs, run atlas-aci index,
-                         append .atlas/ to .gitignore, and write MCP
-                         config for atlas-aci into every detected
-                         MCP-capable host in cwd.
-  --remove               Remove atlas-aci entries from MCP config in cwd.
-                         Idempotent. Does NOT delete .atlas/.
+  --install / --index / --remove
+                         Flag forms of the actions above.
   --container            Use container-runtime mode: build the atlas-aci
                          image locally (docker/podman) and write container-
                          aware MCP config. Implies a local image build on
                          first run; subsequent runs are no-ops when the
-                         image digest is unchanged.
+                         image digest is unchanged. With `index`, only
+                         forces container as the index runtime — no build.
   --runtime docker|podman
                          Force container runtime (skips interactive prompt).
                          Required in --non-interactive mode when --container
                          is set.
   --host HOST            Restrict to one host: claude-code, cursor,
                          copilot, codex. Repeat for multiple. Overrides
-                         auto-detection.
+                         auto-detection. Ignored by `index`.
   --dry-run              Print every file that would be created /
                          modified / removed. Touch no disk state.
                          Does not run `atlas-aci index` or `docker build`.
@@ -125,7 +134,8 @@ Exit codes:
   2  usage error
   3  ATLAS not installed in this project
   4  no MCP-capable host detected and --host not provided
-  5  atlas-aci prereq missing (uv, rg, python3>=3.11, or atlas-aci binary)
+  5  atlas-aci prereq missing (uv, rg, python3>=3.11, atlas-aci binary,
+     or — for `index` auto-detect — neither host nor container present)
   6  atlas-aci index failed
   7  container runtime not on PATH (--container only)
   8  image build failed (--container only)
@@ -151,16 +161,31 @@ _add_host() {
   fi
 }
 
+# Positional action subcommand: peek $1 before the flag loop.
+# Allows `eidolons atlas aci index` / `... install` / `... remove`.
+# A trailing flag form (--index/--install/--remove) is still accepted
+# below; conflicts between positional and flag are caught by the same
+# _action_seen guard.
+case "${1:-}" in
+  install|index|remove)
+    ACTION="$1"; _action_seen=true; shift ;;
+esac
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --install)
       if [ "$_action_seen" = "true" ] && [ "$ACTION" != "install" ]; then
-        exit_usage "Conflicting flags: --install and --$ACTION"
+        exit_usage "Conflicting actions: --install and $ACTION"
       fi
       ACTION="install"; _action_seen=true; shift ;;
+    --index)
+      if [ "$_action_seen" = "true" ] && [ "$ACTION" != "index" ]; then
+        exit_usage "Conflicting actions: --index and $ACTION"
+      fi
+      ACTION="index"; _action_seen=true; shift ;;
     --remove)
       if [ "$_action_seen" = "true" ] && [ "$ACTION" != "remove" ]; then
-        exit_usage "Conflicting flags: --remove and --$ACTION"
+        exit_usage "Conflicting actions: --remove and $ACTION"
       fi
       ACTION="remove"; _action_seen=true; shift ;;
     --container)    CONTAINER_MODE=true; shift ;;
@@ -568,9 +593,12 @@ ensure_gitignore() {
 
 # ─── atlas-aci index (§4.4 side effect) ───────────────────────────────────
 # Runs BEFORE any MCP config writes so an index failure aborts cleanly
-# (A13). Skipped if .atlas/manifest.yaml exists (T24).
+# (A13). Install path skips when .atlas/manifest.yaml exists (T24).
+# The `index` action passes force=true to bypass that gate — re-indexing
+# is the whole point.
 run_index() {
-  if [ -f "./.atlas/manifest.yaml" ]; then
+  local force="${1:-false}"
+  if [ "$force" != "true" ] && [ -f "./.atlas/manifest.yaml" ]; then
     info ".atlas/manifest.yaml present — skipping re-index (delete .atlas/ to force)"
     return 0
   fi
@@ -1273,6 +1301,86 @@ _container_configs_up_to_date() {
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────
+# ─── `index` action: re-run atlas-aci index against the current project ──
+# Reuses the existing installation — does NOT rebuild the image, does NOT
+# touch MCP configs or .gitignore. Mode (host vs container) is auto-
+# detected from what's installed locally; --container forces container.
+#
+# Auto-detect order (when --container is not set):
+#   1. command -v atlas-aci → host mode (simpler, faster, no daemon)
+#   2. atlas-aci:<ATLAS_VERSION> image present in docker → container/docker
+#   3. ditto in podman → container/podman
+#   4. neither → exit 5 with hint to run --install first
+detect_index_mode() {
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    # User forced container; only auto-pick runtime if missing.
+    if [ -z "$RUNTIME" ]; then
+      for rt in docker podman; do
+        if command -v "$rt" >/dev/null 2>&1; then
+          if "$rt" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+               | grep -q "^$(image_tag)$"; then
+            RUNTIME="$rt"
+            return 0
+          fi
+        fi
+      done
+      exit_no_runtime "atlas-aci: --container set but no runtime (docker/podman) has $(image_tag).
+  Fix: eidolons atlas aci install --container --runtime <docker|podman>"
+    fi
+    return 0
+  fi
+
+  if command -v atlas-aci >/dev/null 2>&1; then
+    CONTAINER_MODE=false
+    return 0
+  fi
+
+  for rt in docker podman; do
+    if command -v "$rt" >/dev/null 2>&1; then
+      if "$rt" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+           | grep -q "^$(image_tag)$"; then
+        CONTAINER_MODE=true
+        RUNTIME="$rt"
+        return 0
+      fi
+    fi
+  done
+
+  exit_prereq "atlas-aci: cannot find an installed atlas-aci.
+  Tried:  command -v atlas-aci          (host mode)
+          docker images $(image_tag)
+          podman images $(image_tag)    (container mode)
+  Fix:    eidolons atlas aci install                                        # host mode
+       or eidolons atlas aci install --container --runtime <docker|podman>  # container mode"
+}
+
+main_index() {
+  detect_index_mode
+
+  # Container mode reads LOCAL_DIGEST (set by capture_local_digest) for
+  # the @sha256:<digest> pin in run_index_container. Skip the digest
+  # capture in dry-run — run_index short-circuits to emit_action before
+  # touching LOCAL_DIGEST.
+  if [ "$CONTAINER_MODE" = "true" ] && [ "$DRY_RUN" != "true" ]; then
+    LOCAL_DIGEST="$(capture_local_digest)" || \
+      exit_prereq "atlas-aci: $(image_tag) image disappeared from $RUNTIME between detection and indexing.
+  Fix: eidolons atlas aci install --container --runtime $RUNTIME"
+  fi
+
+  if [ "$CONTAINER_MODE" = "true" ]; then
+    info "Mode: container ($RUNTIME, $(image_tag))"
+  else
+    info "Mode: host (atlas-aci on PATH)"
+  fi
+  [ "$DRY_RUN" = "true" ] && info "Dry-run mode — no files will be modified"
+
+  # force=true so we bypass the install-path .atlas/manifest.yaml gate.
+  run_index true
+
+  [ "$DRY_RUN" = "true" ] && return 0
+  ok "Re-index complete."
+}
+
 main_install() {
   check_prereqs
 
@@ -1391,6 +1499,7 @@ main_remove() {
 
 case "$ACTION" in
   install) main_install ;;
+  index)   main_index ;;
   remove)  main_remove ;;
   *)       exit_usage "Unknown action: $ACTION" ;;
 esac
