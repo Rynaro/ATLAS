@@ -1,0 +1,37 @@
+name: Release ATLAS
+
+# Thin caller for the eidolons-nexus reusable release template.
+# Dispatched manually with a SemVer (without the leading v); the reusable
+# workflow tags, attests, and publishes a GitHub release whose
+# release-manifest.json the nexus's roster-intake.yml then consumes.
+#
+# Source of truth for the reusable workflow:
+#   https://github.com/Rynaro/eidolons/blob/main/.github/workflows/eidolon-release-template.yml
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer version without the leading v (e.g. 1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  release:
+    name: Release ATLAS v${{ inputs.version }}
+    uses: Rynaro/eidolons/.github/workflows/eidolon-release-template.yml@main
+    with:
+      version: ${{ inputs.version }}
+      test-command: bats tests/
+      eiis-version: "1.1"
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
