@@ -174,6 +174,29 @@ seed_claude_host() {
   : > CLAUDE.md
 }
 
+# seed_claude_atlas_subagent — seed .claude/agents/atlas.md with the
+# canonical BASE tools allowlist (matches install.sh's output). Used by
+# subagent-tools tests to verify that aci install extends the line and
+# aci remove restores it. Body is intentionally minimal — these tests
+# only care about the `tools:` line in the YAML frontmatter.
+seed_claude_atlas_subagent() {
+  mkdir -p .claude/agents
+  cat > .claude/agents/atlas.md <<'EOF'
+---
+name: atlas
+description: Test fixture subagent (frontmatter-only).
+when_to_use: tests
+tools: Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)
+methodology: ATLAS
+methodology_version: "1.0"
+role: Explorer/Scout
+handoffs: [spectra, apivr]
+---
+
+# ATLAS — Explorer/Scout Agent (test fixture)
+EOF
+}
+
 # seed_cursor_host — marker for cursor host detection.
 seed_cursor_host() {
   mkdir -p .cursor

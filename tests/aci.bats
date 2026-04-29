@@ -57,7 +57,7 @@ case "\$1" in
     fi
     # Repository:Tag format query.
     if [ -f "${sentinel}" ]; then
-      printf 'atlas-aci:1.2.1\n'
+      printf 'atlas-aci:1.2.2\n'
     fi
     exit 0
     ;;
@@ -776,7 +776,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.1)"* ]] || {
+  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.2)"* ]] || {
     echo "Expected container-mode banner:"
     printf '%s\n' "$output"
     return 1
@@ -899,6 +899,142 @@ esac'
     cat "$BATS_TEST_TMPDIR/atlas-aci.log"
     return 1
   }
+}
+
+# ─── SUB-1 .. SUB-6: Claude Code subagent tools allowlist ────────────────
+# Without this, even though .mcp.json wires the atlas-aci MCP server,
+# Claude Code refuses to expose its tools to the ATLAS subagent because
+# the subagent's `tools:` allowlist doesn't permit `mcp__atlas-aci__*`.
+# The agent silently falls back to native Read+Grep instead of using
+# the indexed graph. SUB-1..SUB-6 pin the install→remove cycle.
+
+@test "SUB-1: --container --install adds mcp__atlas-aci__* entries to .claude/agents/atlas.md" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  seed_claude_atlas_subagent
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ]
+
+  local tools_line
+  tools_line="$(grep -E '^tools:' .claude/agents/atlas.md)"
+  for tool in view_file list_dir search_text search_symbol graph_query test_dry_run memex_read; do
+    [[ "$tools_line" == *"mcp__atlas-aci__$tool"* ]] || {
+      echo "Expected mcp__atlas-aci__$tool in tools line:"
+      echo "$tools_line"
+      return 1
+    }
+  done
+  # Base tools must still be present (extension, not replacement).
+  [[ "$tools_line" == *"Read"* ]] && [[ "$tools_line" == *"Grep"* ]] && [[ "$tools_line" == *"Glob"* ]]
+}
+
+@test "SUB-2: uv --install also adds mcp__atlas-aci__* entries (host mode → MCP still wired)" {
+  setup_fresh_project
+  setup_stubs
+  seed_claude_host
+  seed_claude_atlas_subagent
+
+  run_aci --install --non-interactive
+  [ "$status" -eq 0 ]
+
+  grep -E '^tools:.*mcp__atlas-aci__search_symbol' .claude/agents/atlas.md || {
+    echo "uv-mode install did not extend the subagent allowlist:"
+    grep -E '^tools:' .claude/agents/atlas.md
+    return 1
+  }
+}
+
+@test "SUB-3: two consecutive installs produce byte-identical .claude/agents/atlas.md" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  seed_claude_atlas_subagent
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ]
+  local first
+  first="$(cat .claude/agents/atlas.md)"
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ]
+  local second
+  second="$(cat .claude/agents/atlas.md)"
+
+  [ "$first" = "$second" ] || {
+    echo "Subagent file changed between consecutive installs:"
+    diff <(printf '%s\n' "$first") <(printf '%s\n' "$second")
+    return 1
+  }
+}
+
+@test "SUB-4: --remove restores BASE tools allowlist (no mcp__atlas-aci__* entries)" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  seed_claude_atlas_subagent
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ]
+  grep -q 'mcp__atlas-aci__' .claude/agents/atlas.md   # sanity: install extended
+
+  run_aci --remove --host claude-code --non-interactive
+  [ "$status" -eq 0 ]
+
+  ! grep -q 'mcp__atlas-aci__' .claude/agents/atlas.md || {
+    echo "Remove did not strip mcp__atlas-aci__* entries:"
+    grep -E '^tools:' .claude/agents/atlas.md
+    return 1
+  }
+  grep -qE '^tools: Read, Grep, Glob, Bash\(rg:\*\), Bash\(git log:\*\), Bash\(git show:\*\)$' .claude/agents/atlas.md || {
+    echo "Remove did not produce the canonical BASE tools line:"
+    grep -E '^tools:' .claude/agents/atlas.md
+    return 1
+  }
+}
+
+@test "SUB-5: --dry-run emits MODIFY .claude/agents/atlas.md and touches no disk state" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  seed_claude_atlas_subagent
+
+  local before
+  before="$(cat .claude/agents/atlas.md)"
+
+  run_aci --install --container --runtime docker --dry-run --non-interactive
+  [ "$status" -eq 0 ]
+
+  [[ "$output" == *"MODIFY"*".claude/agents/atlas.md"* ]] || {
+    echo "Expected MODIFY .claude/agents/atlas.md in dry-run output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  local after
+  after="$(cat .claude/agents/atlas.md)"
+  [ "$before" = "$after" ] || {
+    echo "Subagent file modified during --dry-run"
+    diff <(printf '%s\n' "$before") <(printf '%s\n' "$after")
+    return 1
+  }
+}
+
+@test "SUB-6: install when subagent file is absent is a graceful no-op" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  # Deliberately do NOT seed .claude/agents/atlas.md.
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"subagent file absent"* ]] || {
+    echo "Expected info message about absent subagent file:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [ ! -f .claude/agents/atlas.md ]   # we did NOT create it (install.sh's job)
 }
 
 @test "IDX-9: positional index conflicts with --remove → exit 2" {
