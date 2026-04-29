@@ -53,7 +53,7 @@ ATLAS_ACI_REF="8ce17f0e69f135f9324dad718415043276029eb4"
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.2.1"
+ATLAS_VERSION="1.2.2"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -1226,10 +1226,96 @@ unwire_codex() {
   ok "Removed atlas-aci from $target"
 }
 
+# ─── Claude Code subagent tools allowlist ─────────────────────────────────
+# .claude/agents/atlas.md ships from `install.sh` with a `tools:` line
+# that grants only Read/Grep/Glob/Bash. Without this extension, even
+# though the atlas-aci MCP server is wired into .mcp.json, Claude Code
+# refuses to expose its tools to the ATLAS subagent — the agent silently
+# falls back to native Read+Grep instead of using indexed-graph queries.
+#
+# This module rewrites just the `tools:` line in the YAML frontmatter on
+# install/remove. Idempotent (same canonical strings produce byte-
+# identical output). Body of the file is untouched.
+#
+# Canonical tool lists are kept here (and not in install.sh) so the
+# install→aci-install→aci-remove cycle is symmetric:
+#   - install.sh writes the BASE list.
+#   - aci install extends it to the WITH-MCP list.
+#   - aci remove restores BASE.
+# If install.sh's list ever changes, _subagent_canonical_tools_base
+# below must follow.
+
+_SUBAGENT_FILE="./.claude/agents/atlas.md"
+
+_subagent_canonical_tools_base() {
+  printf 'Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)'
+}
+
+_subagent_canonical_tools_with_mcp() {
+  printf 'Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*), '
+  printf 'mcp__atlas-aci__view_file, mcp__atlas-aci__list_dir, '
+  printf 'mcp__atlas-aci__search_text, mcp__atlas-aci__search_symbol, '
+  printf 'mcp__atlas-aci__graph_query, mcp__atlas-aci__test_dry_run, '
+  printf 'mcp__atlas-aci__memex_read'
+}
+
+# _subagent_set_tools_line FILE NEW_TOOLS
+# Replace the `tools: …` line in the first YAML frontmatter block of
+# FILE with `tools: NEW_TOOLS`. Atomic via temp file + mv. No-op if
+# the file does not exist (subagent absent → not our concern). Bash-
+# 3.2-safe; awk-only, no yq dep.
+_subagent_set_tools_line() {
+  local file="$1" new_tools="$2"
+  [ -f "$file" ] || return 0
+  local dir tmp
+  dir="$(dirname "$file")"
+  tmp="$(mktemp "${dir}/.atlas-aci-subagent-XXXXXX")" || die "mktemp failed in $dir"
+  awk -v new_tools="$new_tools" '
+    BEGIN { fm_count = 0; replaced = 0 }
+    /^---$/ { fm_count++; print; next }
+    fm_count == 1 && /^tools:/ && !replaced {
+      print "tools: " new_tools
+      replaced = 1
+      next
+    }
+    { print }
+  ' "$file" > "$tmp" || { rm -f "$tmp"; die "subagent tools rewrite failed: $file"; }
+  mv "$tmp" "$file" || { rm -f "$tmp"; die "atomic rename failed: $file"; }
+}
+
+# subagent_extend_tools — called after json_install for claude-code.
+# Adds the seven mcp__atlas-aci__* entries to the subagent allowlist.
+# Idempotent.
+subagent_extend_tools() {
+  [ -f "$_SUBAGENT_FILE" ] || {
+    info "claude-code subagent file absent — skipping tools extension ($_SUBAGENT_FILE)"
+    return 0
+  }
+  if [ "$DRY_RUN" = "true" ]; then
+    emit_action "MODIFY" "$_SUBAGENT_FILE"
+    return 0
+  fi
+  _subagent_set_tools_line "$_SUBAGENT_FILE" "$(_subagent_canonical_tools_with_mcp)"
+}
+
+# subagent_restore_tools — called after json_remove for claude-code.
+# Restores the BASE allowlist (matches install.sh).
+subagent_restore_tools() {
+  [ -f "$_SUBAGENT_FILE" ] || return 0
+  if [ "$DRY_RUN" = "true" ]; then
+    emit_action "MODIFY" "$_SUBAGENT_FILE"
+    return 0
+  fi
+  _subagent_set_tools_line "$_SUBAGENT_FILE" "$(_subagent_canonical_tools_base)"
+}
+
 # ─── Per-host dispatch ────────────────────────────────────────────────────
 apply_host_install() {
   case "$1" in
-    claude-code) json_install "./.mcp.json" ;;
+    claude-code)
+      json_install "./.mcp.json"
+      subagent_extend_tools
+      ;;
     cursor)      json_install "./.cursor/mcp.json" ;;
     codex)       wire_codex ;;
     copilot)
@@ -1260,7 +1346,10 @@ apply_host_install() {
 
 apply_host_remove() {
   case "$1" in
-    claude-code) json_remove "./.mcp.json" ;;
+    claude-code)
+      json_remove "./.mcp.json"
+      subagent_restore_tools
+      ;;
     cursor)      json_remove "./.cursor/mcp.json" ;;
     codex)       unwire_codex ;;
     copilot)

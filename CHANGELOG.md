@@ -7,6 +7,59 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.2.2] - 2026-04-29 — Claude Code subagent allowlist now grants atlas-aci MCP tools
+
+### Fixed
+- **ATLAS subagent fell back to native Read/Grep instead of using
+  atlas-aci MCP tools.** `.claude/agents/atlas.md` (written by
+  `install.sh`) ships a `tools:` line that allowlists only
+  `Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)`.
+  When `eidolons atlas aci install` wires the atlas-aci MCP server
+  into `.mcp.json`, Claude Code connects to it successfully — the
+  warning resolves, the seven tools (`view_file`, `list_dir`,
+  `search_text`, `search_symbol`, `graph_query`, `test_dry_run`,
+  `memex_read`) become available at the project level — but the
+  ATLAS subagent's allowlist does not include the
+  `mcp__atlas-aci__<tool>` namespaces, so the subagent silently
+  cannot invoke any of them and falls back to native `Read`/`Grep`.
+  The expensive index sits idle.
+
+  `eidolons atlas aci install` now also rewrites the `tools:` line in
+  `.claude/agents/atlas.md` to include all seven `mcp__atlas-aci__*`
+  entries alongside the BASE tools. `eidolons atlas aci remove`
+  restores the BASE list. The agent body and the rest of the
+  frontmatter are untouched. Idempotent (canonical strings produce
+  byte-identical output across re-runs); awk-only rewrite, no yq
+  dependency for the edit.
+
+  The base/extended tool lists are kept inside `commands/aci.sh`
+  rather than `install.sh` — this keeps the install→aci-install→
+  aci-remove cycle symmetric and means the BASE list is the only
+  thing on disk when atlas-aci is not wired.
+
+  Note: this only affects Claude Code's subagent allowlist. The MCP
+  server itself was wired correctly in 1.2.1. Cursor and Codex don't
+  gate MCP tools per-subagent the same way Claude Code does, so no
+  parallel work is needed there.
+
+### Added
+- **`tests/aci.bats` SUB-1 .. SUB-6** — six new bats cases covering:
+  install extends the allowlist (container mode), install extends
+  the allowlist (uv/host mode), idempotency across consecutive
+  installs, remove restores the BASE list, `--dry-run` emits a
+  `MODIFY` action verb without touching disk, and graceful no-op
+  when `.claude/agents/atlas.md` is absent (atlas-aci does not
+  recreate it — that remains `install.sh`'s job).
+- **`tests/helpers.bash` `seed_claude_atlas_subagent`** — fixture
+  that writes the canonical BASE-tools subagent file used by the
+  SUB-* tests.
+
+### Changed
+- **`EIDOLON_VERSION`** bumped `1.2.1` → `1.2.2`. Patch release: bug
+  fix only, no public CLI surface change.
+- **`ATLAS_VERSION`** bumped `1.2.1` → `1.2.2` in lock-step. Image
+  tag follows: `atlas-aci:1.2.2`.
+
 ## [1.2.1] - 2026-04-29 — MCP config writes absolute project path (Claude Code warning fix)
 
 ### Fixed
