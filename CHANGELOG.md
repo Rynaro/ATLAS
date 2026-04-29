@@ -7,6 +7,50 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.2.1] - 2026-04-29 — MCP config writes absolute project path (Claude Code warning fix)
+
+### Fixed
+- **`.mcp.json` / `.cursor/mcp.json` / `.codex/config.toml` / copilot
+  agent file** — atlas-aci entries previously embedded the literal
+  `${workspaceFolder}` placeholder for `--repo`, `--memex-root`, and
+  the docker `-v` bind mount paths. Cursor / VSCode expand this
+  variable natively, but **Claude Code parses `${VAR}` as an env-var
+  reference** and so emitted, on every project load:
+
+  ```
+  [Warning] [atlas-aci] mcpServers.atlas-aci: Missing environment variables: workspaceFolder
+  ```
+
+  After which the docker mount dereferenced the literal `${workspaceFolder}`
+  string and the MCP server failed to attach. All host bodies now bake
+  the absolute project path (`$PWD` at install time) directly. Six
+  call sites touched:
+  `container_json_fragment`, `json_server_fragment`,
+  `_copilot_command_array` (uv + container branches),
+  the copilot uv-mode yq merge (refactored to use the same env-injected
+  pattern as the container branch), and `_codex_canonical_body_container`.
+
+  Trade-off: `.mcp.json` bodies are now machine-specific. Re-run
+  `eidolons atlas aci install` after relocating a project; consider
+  gitignoring the file in team workflows where each developer's path
+  differs.
+
+### Added
+- **`tests/aci.bats` ABS-1 / ABS-2 / ABS-3** — three regression tests
+  pinning the post-install body shape: container-mode `.mcp.json`,
+  uv-mode `.mcp.json`, and container-mode `.codex/config.toml` must
+  all contain the absolute project path verbatim and **must not**
+  contain `${workspaceFolder}` anywhere. Prevents a silent regression
+  if someone re-introduces the placeholder.
+
+### Changed
+- **`EIDOLON_VERSION`** bumped `1.2.0` → `1.2.1`. Patch release: bug
+  fix only, no public surface change.
+- **`ATLAS_VERSION`** bumped `1.2.0` → `1.2.1` in lock-step. Container
+  image tag follows: `atlas-aci:1.2.1`. The version bump cache-busts
+  any stale local image from 1.2.0 (which would otherwise silently
+  re-use the broken-config path).
+
 ## [1.2.0] - 2026-04-28 — `eidolons atlas aci index` subcommand
 
 ### Added
