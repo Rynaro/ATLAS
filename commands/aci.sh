@@ -53,7 +53,7 @@ ATLAS_ACI_REF="8ce17f0e69f135f9324dad718415043276029eb4"
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.2.0"
+ATLAS_VERSION="1.2.1"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -478,8 +478,17 @@ ensure_image() {
 
 container_json_fragment() {
   # $1 = runtime (docker|podman), $2 = digest (sha256 hex)
+  # Host-side bind paths are written as absolute literals at install
+  # time (the cwd is the project root). Earlier releases used the
+  # `${workspaceFolder}` VSCode-style placeholder, which Cursor expands
+  # natively but Claude Code does not — Claude Code treats `${VAR}` as
+  # an env-var lookup and emits a "Missing environment variables:
+  # workspaceFolder" warning, after which the docker `-v` mount
+  # dereferences the literal string and fails. Absolute paths are
+  # unambiguous across hosts; the trade-off is per-machine .mcp.json
+  # bodies (re-run `eidolons atlas aci install` after relocating).
   local rt="$1" digest="$2"
-  jq -n --arg rt "$rt" --arg digest "$digest" '{
+  jq -n --arg rt "$rt" --arg digest "$digest" --arg ws "$PWD" '{
     command: $rt,
     args: [
       "run",
@@ -487,9 +496,9 @@ container_json_fragment() {
       "-i",
       "--read-only",
       "-v",
-      "${workspaceFolder}:/repo:ro",
+      ($ws + ":/repo:ro"),
       "-v",
-      "${workspaceFolder}/.atlas/memex:/memex",
+      ($ws + "/.atlas/memex:/memex"),
       ("atlas-aci@sha256:" + $digest),
       "serve",
       "--repo",
@@ -651,13 +660,15 @@ run_index_container() {
 # The fail-closed comparator (wire_codex R2 equivalent for JSON) is
 # implemented by comparing the current body against BOTH canonical forms.
 json_server_fragment() {
-  # uv-mode canonical fragment
-  jq -n '{
+  # uv-mode canonical fragment. Absolute project path baked at install
+  # time — same rationale as container_json_fragment (Claude Code does
+  # not expand `${workspaceFolder}`).
+  jq -n --arg ws "$PWD" '{
     command: "atlas-aci",
     args: [
       "serve",
-      "--repo", "${workspaceFolder}",
-      "--memex-root", "${workspaceFolder}/.atlas/memex"
+      "--repo", $ws,
+      "--memex-root", ($ws + "/.atlas/memex")
     ]
   }'
 }
@@ -856,15 +867,17 @@ _copilot_command_array() {
   # $1 = mode: "uv" or "container"
   # $2 (container only) = runtime
   # $3 (container only) = digest
+  # Absolute project path baked at install time — see notes on
+  # container_json_fragment for why.
   if [ "$1" = "uv" ]; then
-    printf '["atlas-aci", "serve", "--repo", "${workspaceFolder}", "--memex-root", "${workspaceFolder}/.atlas/memex"]'
+    jq -n --arg ws "$PWD" \
+      '["atlas-aci", "serve", "--repo", $ws, "--memex-root", ($ws + "/.atlas/memex")]'
   else
     local rt="$2" digest="$3"
-    # Build the JSON array for the container command
-    jq -n --arg rt "$rt" --arg digest "$digest" \
+    jq -n --arg rt "$rt" --arg digest "$digest" --arg ws "$PWD" \
       '[$rt, "run", "--rm", "-i", "--read-only",
-        "-v", "${workspaceFolder}:/repo:ro",
-        "-v", "${workspaceFolder}/.atlas/memex:/memex",
+        "-v", ($ws + ":/repo:ro"),
+        "-v", ($ws + "/.atlas/memex:/memex"),
         ("atlas-aci@sha256:" + $digest),
         "serve", "--repo", "/repo", "--memex-root", "/memex"]'
   fi
@@ -916,13 +929,18 @@ copilot_install_one() {
       rm -f "$cmd_tmp"
     }
   else
-    merged="$(yq eval '
+    # uv-mode now follows the same env-injected pattern as the container
+    # branch above, so the absolute project path is interpolated by jq
+    # rather than baked into a literal yq expression.
+    local cmd_array
+    cmd_array="$(_copilot_command_array uv)"
+    merged="$(CMD_ARRAY="$cmd_array" yq eval '
       .tools = (.tools // {}) |
       .tools.mcp_servers = (.tools.mcp_servers // []) |
       .tools.mcp_servers = ([.tools.mcp_servers[] | select(.name != "atlas-aci")] + [{
         "name": "atlas-aci",
         "transport": "stdio",
-        "command": ["atlas-aci", "serve", "--repo", "${workspaceFolder}", "--memex-root", "${workspaceFolder}/.atlas/memex"]
+        "command": env(CMD_ARRAY)
       }])
     ' "$fm")" || { rm -f "$fm" "$body"; die "yq merge failed on $target"; }
   fi
@@ -1001,10 +1019,15 @@ copilot_remove_one() {
 #     [mcp_servers.atlas-aci]
 #     command = "<RUNTIME>"
 #     args = ["run", "--rm", "-i", "--read-only", "-v",
-#             "${workspaceFolder}:/repo:ro", "-v",
-#             "${workspaceFolder}/.atlas/memex:/memex",
+#             "<ABS_PROJECT_PATH>:/repo:ro", "-v",
+#             "<ABS_PROJECT_PATH>/.atlas/memex:/memex",
 #             "atlas-aci@sha256:<DIGEST>", "serve", "--repo",
 #             "/repo", "--memex-root", "/memex"]
+#
+#   <ABS_PROJECT_PATH> is the cwd at install time (literal absolute
+#   path baked into the file). Earlier releases used `${workspaceFolder}`
+#   here too — see container_json_fragment for the rationale on the
+#   switch (Claude Code does not expand that placeholder).
 #
 # R2 mitigation: if the file already contains [mcp_servers.atlas-aci] and
 # its body deviates from BOTH the uv canonical AND the container canonical
@@ -1018,11 +1041,12 @@ _codex_canonical_body_uv() {
 }
 
 # _codex_canonical_body_container RUNTIME DIGEST — canonical TOML body
-# for container mode (no heading).
+# for container mode (no heading). Absolute project path baked at
+# install time — same rationale as container_json_fragment.
 _codex_canonical_body_container() {
   local rt="$1" digest="$2"
   printf 'command = "%s"\n' "$rt"
-  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "${workspaceFolder}:/repo:ro", "-v", "${workspaceFolder}/.atlas/memex:/memex", "atlas-aci@sha256:%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$digest"
+  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "atlas-aci@sha256:%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$digest"
 }
 
 # _codex_canonical_body — returns the canonical body for the current mode.

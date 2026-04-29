@@ -57,7 +57,7 @@ case "\$1" in
     fi
     # Repository:Tag format query.
     if [ -f "${sentinel}" ]; then
-      printf 'atlas-aci:1.2.0\n'
+      printf 'atlas-aci:1.2.1\n'
     fi
     exit 0
     ;;
@@ -205,6 +205,98 @@ EOF
   [[ "$output" == *"BUILD"* ]] || {
     echo "Expected BUILD in dry-run output (podman):"
     printf '%s\n' "$output"
+    return 1
+  }
+}
+
+# ─── ABS-1 / ABS-2 / ABS-3: absolute project path in MCP bodies ──────────
+# Regression coverage for the bug where `.mcp.json` shipped
+# `${workspaceFolder}` literal — Cursor expands it natively, but Claude
+# Code treats `${VAR}` as env-var lookup and emits "Missing environment
+# variables: workspaceFolder" with the docker `-v` mount failing.
+# `1.2.1` switched to absolute paths baked at install time; these tests
+# pin that down so it can't silently regress.
+
+@test "ABS-1: --container install writes absolute project path in .mcp.json (no \${workspaceFolder})" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ]
+  [ -f ".mcp.json" ]
+
+  # The body must NOT contain the legacy placeholder anywhere.
+  if grep -q '\${workspaceFolder}' .mcp.json; then
+    echo "Regression — .mcp.json still contains \${workspaceFolder}:"
+    cat .mcp.json
+    return 1
+  fi
+
+  # Both -v mounts must reference the absolute project root (cwd at
+  # install time = $PWD = the test project dir).
+  run jq -r '.mcpServers["atlas-aci"].args[5]' .mcp.json
+  [ "$output" = "${PWD}:/repo:ro" ] || {
+    echo "Expected first -v mount = '${PWD}:/repo:ro', got: $output"
+    cat .mcp.json
+    return 1
+  }
+  run jq -r '.mcpServers["atlas-aci"].args[7]' .mcp.json
+  [ "$output" = "${PWD}/.atlas/memex:/memex" ] || {
+    echo "Expected second -v mount = '${PWD}/.atlas/memex:/memex', got: $output"
+    cat .mcp.json
+    return 1
+  }
+}
+
+@test "ABS-2: uv install writes absolute project path in .mcp.json" {
+  setup_fresh_project
+  setup_stubs
+  seed_claude_host
+
+  run_aci --install --non-interactive
+  [ "$status" -eq 0 ]
+  [ -f ".mcp.json" ]
+
+  if grep -q '\${workspaceFolder}' .mcp.json; then
+    echo "Regression — uv-mode .mcp.json still contains \${workspaceFolder}:"
+    cat .mcp.json
+    return 1
+  fi
+
+  run jq -r '.mcpServers["atlas-aci"].args[2]' .mcp.json
+  [ "$output" = "$PWD" ] || {
+    echo "Expected --repo arg = '$PWD', got: $output"
+    cat .mcp.json
+    return 1
+  }
+  run jq -r '.mcpServers["atlas-aci"].args[4]' .mcp.json
+  [ "$output" = "${PWD}/.atlas/memex" ] || {
+    echo "Expected --memex-root arg = '${PWD}/.atlas/memex', got: $output"
+    cat .mcp.json
+    return 1
+  }
+}
+
+@test "ABS-3: --container install writes absolute path in .codex/config.toml" {
+  setup_fresh_project
+  setup_container_stubs
+  install_stub "atlas-aci" 0 ':'
+  : > AGENTS.md   # codex host marker
+
+  run_aci --install --container --runtime docker --non-interactive --host codex
+  [ "$status" -eq 0 ]
+  [ -f ".codex/config.toml" ]
+
+  if grep -q '\${workspaceFolder}' .codex/config.toml; then
+    echo "Regression — .codex/config.toml still contains \${workspaceFolder}:"
+    cat .codex/config.toml
+    return 1
+  fi
+  # Must contain the absolute project path verbatim in the args line.
+  grep -qF "$PWD:/repo:ro" .codex/config.toml || {
+    echo "Expected '$PWD:/repo:ro' literal in .codex/config.toml:"
+    cat .codex/config.toml
     return 1
   }
 }
@@ -684,7 +776,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.0)"* ]] || {
+  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.1)"* ]] || {
     echo "Expected container-mode banner:"
     printf '%s\n' "$output"
     return 1
