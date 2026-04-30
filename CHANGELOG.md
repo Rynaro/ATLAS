@@ -7,6 +7,22 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`.github/workflows/release.yml`** — adopts the eidolons-nexus
+  release-integrity contract by wrapping the reusable
+  `Rynaro/eidolons/.github/workflows/eidolon-release-template.yml`
+  workflow. Dispatched manually with a SemVer; the template runs
+  `bats tests/`, validates EIIS-1.1 conformance, tags the commit, attests
+  the release artifacts, and publishes a `release-manifest.json` (with
+  `commit`, `tree`, `archive_sha256`, optional `manifest_sha256`, and
+  `provenance.github_attestation: true`) so the nexus `roster-intake.yml`
+  workflow can populate `versions.releases.<v>` for ATLAS.
+
+---
+
 ## [1.2.2] - 2026-04-29 — Claude Code subagent allowlist now grants atlas-aci MCP tools
 
 ### Fixed
