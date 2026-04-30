@@ -43,11 +43,24 @@ setup() {
   STUBS_DIR="$BATS_TEST_TMPDIR/stubs"
   mkdir -p "$STUBS_DIR"
 
+  # Shadow dir — used by uninstall_stub to mask specific host binaries
+  # without dropping their containing directories from PATH. Dropping a
+  # whole dir (the previous strategy) is unsafe on Linux where coreutils
+  # like /usr/bin/{rm,mkdir,cat} share a directory with docker/podman/awk.
+  SHADOW_DIR="$BATS_TEST_TMPDIR/shadow"
+  mkdir -p "$SHADOW_DIR"
+  # Space-separated list of names currently masked via uninstall_stub.
+  _STUB_UNINSTALLED=""
+
   # Curated PATH: stubs first, then a minimal allowlist of real tools
   # the host box provides but we do NOT want to stub (coreutils etc).
   # jq/yq/shellcheck tests use the real binaries since we test the
   # script's integration with them.
   _STUB_REAL_TOOLS_PATH="$(real_tools_path)"
+  # Snapshot the real-tools PATH at setup time. uninstall_stub rebuilds
+  # SHADOW_DIR against this snapshot, never against the current $PATH,
+  # so PATH mutation never compounds across calls.
+  _STUB_BASE_PATH="$_STUB_REAL_TOOLS_PATH"
   export PATH="$STUBS_DIR:$_STUB_REAL_TOOLS_PATH"
 }
 
@@ -102,24 +115,73 @@ EOF
 # test. Without the scrub, a stub for `rg` (or any tool that the host
 # box happens to have installed via brew/apt) would fall through to the
 # real binary and the prereq check would never trip.
+#
+# Strategy: build $SHADOW_DIR as a directory of symlinks pointing at every
+# executable found on $_STUB_BASE_PATH EXCEPT the names in
+# $_STUB_UNINSTALLED. PATH is then $STUBS_DIR:$SHADOW_DIR — no original
+# host PATH dirs remain, so masking is total, but coreutils stay reachable
+# because their symlinks are in $SHADOW_DIR. This is the Linux-portable
+# replacement for the old "drop the dir from PATH" approach, which broke
+# whenever a target binary lived alongside coreutils in /usr/bin
+# (the typical Linux layout, including GitHub Actions runners).
 uninstall_stub() {
   local name="$1"
   rm -f "$STUBS_DIR/$name"
-  # Walk the inbound PATH; drop every dir that contains an executable
-  # called NAME. Bash 3.2-safe (no readarray, no associative arrays).
-  local snapshot="${BATS_ORIGINAL_PATH:-$PATH}"
-  local new_path="" old_IFS dir
+  # Track the masked name (idempotent — avoid duplicate entries).
+  case " $_STUB_UNINSTALLED " in
+    *" $name "*) : ;;
+    *) _STUB_UNINSTALLED="${_STUB_UNINSTALLED:+$_STUB_UNINSTALLED }$name" ;;
+  esac
+  _stub_rebuild_shadow_path
+}
+
+# _stub_rebuild_shadow_path — internal. Refresh $SHADOW_DIR from
+# $_STUB_BASE_PATH minus $_STUB_UNINSTALLED names, then re-export PATH.
+# Bash 3.2-safe (no associative arrays).
+_stub_rebuild_shadow_path() {
+  # The rebuild itself shells out to `rm`, `mkdir`, `ln`, `basename` —
+  # all of which resolve via PATH. Run with the original real-tools
+  # PATH so we don't depend on the (about-to-be-rewritten) shadow.
+  local _saved_path="$PATH"
+  export PATH="$_STUB_BASE_PATH"
+
+  rm -rf "$SHADOW_DIR"
+  mkdir -p "$SHADOW_DIR"
+
+  local old_IFS dir entry base masked
   old_IFS="$IFS"
   IFS=':'
-  for dir in $snapshot; do
+  for dir in $_STUB_BASE_PATH; do
     IFS="$old_IFS"
-    if [ -n "$dir" ] && [ ! -x "$dir/$name" ]; then
-      if [ -z "$new_path" ]; then new_path="$dir"; else new_path="$new_path:$dir"; fi
+    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+      IFS=':'
+      continue
     fi
+    # Iterate every executable in $dir; symlink into $SHADOW_DIR unless
+    # already shadowed (first dir in PATH wins, like real PATH lookup)
+    # or in the masked list.
+    for entry in "$dir"/*; do
+      [ -e "$entry" ] || continue
+      [ -d "$entry" ] && continue
+      [ -x "$entry" ] || continue
+      base="${entry##*/}"
+      # Already symlinked from an earlier (higher-priority) PATH dir?
+      [ -e "$SHADOW_DIR/$base" ] && continue
+      # In the masked list?
+      masked=0
+      case " $_STUB_UNINSTALLED " in
+        *" $base "*) masked=1 ;;
+      esac
+      [ "$masked" -eq 1 ] && continue
+      ln -s "$entry" "$SHADOW_DIR/$base" 2>/dev/null || true
+    done
     IFS=':'
   done
   IFS="$old_IFS"
-  export PATH="$STUBS_DIR:$new_path"
+
+  export PATH="$STUBS_DIR:$SHADOW_DIR"
+  # Suppress unused-var warning from set -u if helpers ever flips it on.
+  : "$_saved_path"
 }
 
 # setup_stubs — install the default happy-path stubs every install test
@@ -355,11 +417,24 @@ normalise_json() {
 
 # snapshot_mtimes DIR — echoes "<path>\t<mtime>" lines for every file
 # under DIR. Used by T25 to prove --dry-run touched nothing.
+#
+# stat(1) is incompatibly split between BSD (`-f FMT`) and GNU (`-c FMT`).
+# On Linux GNU coreutils, `stat -f '%N %m'` is interpreted as
+# `--file-system` plus a positional file arg `%N %m`, which dumps
+# filesystem stats whose Free/Available block counts fluctuate between
+# calls regardless of whether any file under DIR changed. That makes T25
+# false-positive on Linux. Detect the mode by sniffing `stat --version`:
+# GNU prints "coreutils" on `--version`; BSD/macOS errors out.
 snapshot_mtimes() {
-  find "$1" -type f -print0 2>/dev/null \
-    | xargs -0 stat -f '%N %m' 2>/dev/null \
-    || find "$1" -type f -print0 2>/dev/null \
-       | xargs -0 stat -c '%n %Y' 2>/dev/null
+  if stat --version >/dev/null 2>&1; then
+    # GNU coreutils — supports -c FMT.
+    find "$1" -type f -print0 2>/dev/null \
+      | xargs -0 stat -c '%n %Y' 2>/dev/null
+  else
+    # BSD (macOS) — supports -f FMT.
+    find "$1" -type f -print0 2>/dev/null \
+      | xargs -0 stat -f '%N %m' 2>/dev/null
+  fi
 }
 
 # run_aci ARGS... — invoke the script under test from the current
