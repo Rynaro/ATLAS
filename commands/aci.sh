@@ -58,14 +58,8 @@ ATLAS_ACI_REF="8ce17f0e69f135f9324dad718415043276029eb4"
 # ghcr.io lowercases the org segment per registry convention.
 ATLAS_ACI_IMAGE_REF="ghcr.io/rynaro/atlas-aci"
 
-# TODO(ghcr-bootstrap): replace with the real digest from the first successful
-# release.yml run on Rynaro/atlas-aci. See
-# https://github.com/Rynaro/eidolons/blob/main/.spectra/plans/atlas-aci-ghcr-distribution-2026-05-01/spec.md
-#
-# Digest captured by:
-#   docker buildx imagetools inspect ghcr.io/rynaro/atlas-aci:<tag> \
-#     --format '{{.Manifest.Digest}}'
-ATLAS_ACI_IMAGE_DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"
+# Pin: ghcr.io/rynaro/atlas-aci v0.2.2 (first signed GHCR publish, multi-arch, cosign + SBOM + provenance, Trivy gate green).
+ATLAS_ACI_IMAGE_DIGEST="sha256:386677f06b0ce23cb4883f6c0f91d8eac22328cd7d9451ae241e2f183207ad96"
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
