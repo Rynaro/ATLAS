@@ -23,6 +23,41 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.3.0] - 2026-05-01 — GHCR-prefixed canonical body + container security hardening
+
+### Changed
+
+- **`commands/aci.sh` canonical body — registry-prefixed image reference (spec T4):**
+  Container-mode canonical bodies for all four MCP host targets (`.mcp.json`,
+  `.cursor/mcp.json`, `.codex/config.toml`, `.github/agents/*.agent.md`) now
+  reference `ghcr.io/rynaro/atlas-aci@sha256:<digest>` instead of the bare
+  `atlas-aci@sha256:<digest>` form. The bare form resolved to
+  `docker.io/library/atlas-aci`, which 404s — this was a known bug fixed here.
+- **`ATLAS_ACI_IMAGE_REF` + `ATLAS_ACI_IMAGE_DIGEST` constants:** Replace the
+  parent spec's local-image-id capture step (D3 — `docker images --no-trunc`).
+  The digest is the registry pin constant `ATLAS_ACI_IMAGE_DIGEST` (pinned to
+  `sha256:386677f06b0ce23cb4883f6c0f91d8eac22328cd7d9451ae241e2f183207ad96`,
+  the first signed GHCR publish, multi-arch, cosign + SBOM + provenance,
+  Trivy gate green). The full pull reference is composed as
+  `${ATLAS_ACI_IMAGE_REF}@${ATLAS_ACI_IMAGE_DIGEST}`.
+- **Security hardening (spec H3):** All four MCP emit paths now include
+  `--cap-drop ALL` and `--security-opt no-new-privileges` immediately before
+  the image reference in the docker/podman `args` array.
+- **Fail-closed comparator (R2) — transition window:** The comparator now
+  accepts BOTH the old bare-ref body (legacy, from before 1.3.0) AND the new
+  registry-prefixed body. On detecting a legacy body, it upgrades rather than
+  refuses.
+- **`EIDOLON_VERSION`** bumped `1.2.2 → 1.3.0`.
+- **`ATLAS_VERSION`** in `commands/aci.sh` bumped `1.2.2 → 1.3.0`.
+
+### Notes
+
+- Spec references: T4 + H3 in
+  `.spectra/plans/atlas-aci-ghcr-distribution-2026-05-01/spec.md`
+  (`Rynaro/eidolons` nexus).
+
+---
+
 ## [1.2.2] - 2026-04-29 — Claude Code subagent allowlist now grants atlas-aci MCP tools
 
 ### Fixed

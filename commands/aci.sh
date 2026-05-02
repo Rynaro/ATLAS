@@ -51,9 +51,25 @@ ATLAS_ACI_PIN="8ce17f0e69f135f9324dad718415043276029eb4"
 # Pin captured 2026-04-28 from `git -C atlas-aci log -1 --format=%H`.
 ATLAS_ACI_REF="8ce17f0e69f135f9324dad718415043276029eb4"
 
+# ─── GHCR registry-prefixed image reference (T4 / spec §D-NEW-3) ──────────
+# The canonical registry for atlas-aci. Combined with ATLAS_ACI_IMAGE_DIGEST
+# below to form the full pull reference: ${ATLAS_ACI_IMAGE_REF}@${ATLAS_ACI_IMAGE_DIGEST}.
+#
+# ghcr.io lowercases the org segment per registry convention.
+ATLAS_ACI_IMAGE_REF="ghcr.io/rynaro/atlas-aci"
+
+# TODO(ghcr-bootstrap): replace with the real digest from the first successful
+# release.yml run on Rynaro/atlas-aci. See
+# https://github.com/Rynaro/eidolons/blob/main/.spectra/plans/atlas-aci-ghcr-distribution-2026-05-01/spec.md
+#
+# Digest captured by:
+#   docker buildx imagetools inspect ghcr.io/rynaro/atlas-aci:<tag> \
+#     --format '{{.Manifest.Digest}}'
+ATLAS_ACI_IMAGE_DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.2.2"
+ATLAS_VERSION="1.3.0"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -403,7 +419,12 @@ select_runtime() {
 
 # ─── Container image management ───────────────────────────────────────────
 # image_tag — the local tag we build into.
-image_tag() { printf "atlas-aci:%s" "$ATLAS_VERSION"; }
+image_tag() { printf "%s:%s" "$ATLAS_ACI_IMAGE_REF" "$ATLAS_VERSION"; }
+
+# image_full_ref — the registry-prefixed digest reference used in all
+# canonical bodies (spec T4). Composed from ATLAS_ACI_IMAGE_REF and
+# ATLAS_ACI_IMAGE_DIGEST.
+image_full_ref() { printf "%s@%s" "$ATLAS_ACI_IMAGE_REF" "$ATLAS_ACI_IMAGE_DIGEST"; }
 
 # image_exists — returns 0 if the local tagged image exists.
 image_exists() {
@@ -411,14 +432,12 @@ image_exists() {
     | grep -q "^$(image_tag)$"
 }
 
-# capture_local_digest — echoes the sha256 image ID (without "sha256:" prefix)
-# of the locally built image. Returns 1 if the image is absent.
-capture_local_digest() {
-  local full_id
-  full_id="$("$RUNTIME" images --no-trunc --format '{{.ID}}' "$(image_tag)" 2>/dev/null | head -n 1)"
-  [ -n "$full_id" ] || return 1
-  # Strip leading "sha256:" prefix if present.
-  echo "$full_id" | sed 's/^sha256://'
+# capture_registry_digest — echoes the registry digest (sha256:... form)
+# from the ATLAS_ACI_IMAGE_DIGEST constant (spec T4: registry digest, not
+# local image ID). Parent spec D3 (local image ID capture) is replaced by
+# this constant. Returns 1 if the constant is the placeholder.
+capture_registry_digest() {
+  printf "%s" "$ATLAS_ACI_IMAGE_DIGEST"
 }
 
 # build_image — runs `<runtime> build` with the git URL context.
@@ -451,24 +470,22 @@ build_image() {
 }
 
 # ensure_image — checks if the image is present; builds if absent.
-# Sets LOCAL_DIGEST global. Returns 1 (noop signal) if image existed
-# and digest is unchanged from what's currently in any existing host config.
-# For simplicity, we always rebuild only when image is absent, and let
-# the canonical-body comparator drive the idempotency on subsequent runs.
+# Sets LOCAL_DIGEST global to the registry digest (ATLAS_ACI_IMAGE_DIGEST).
+# The digest is the registry pin constant, not captured from the local store.
+# (spec T4: replaces parent spec D3 local image ID capture.)
 ensure_image() {
-  LOCAL_DIGEST=""
+  # LOCAL_DIGEST holds the full sha256:... string from the registry constant.
+  LOCAL_DIGEST="$(capture_registry_digest)"
 
   if image_exists; then
-    LOCAL_DIGEST="$(capture_local_digest)" || die "Failed to capture local image digest"
-    info "Image $(image_tag) already present (digest: ${LOCAL_DIGEST})"
+    info "Image $(image_tag) already present (registry digest: ${LOCAL_DIGEST})"
     return 0
   fi
 
   # Image absent — build it.
   build_image
-  [ "$DRY_RUN" = "true" ] && { LOCAL_DIGEST="<pending-build>"; return 0; }
+  [ "$DRY_RUN" = "true" ] && { LOCAL_DIGEST="$ATLAS_ACI_IMAGE_DIGEST"; return 0; }
 
-  LOCAL_DIGEST="$(capture_local_digest)" || die "Failed to capture local image digest after build"
   ok "Image digest: ${LOCAL_DIGEST}"
 }
 
@@ -477,7 +494,10 @@ ensure_image() {
 # for container mode.
 
 container_json_fragment() {
-  # $1 = runtime (docker|podman), $2 = digest (sha256 hex)
+  # $1 = runtime (docker|podman), $2 = digest (full sha256:... string)
+  # The image reference is registry-prefixed: ghcr.io/rynaro/atlas-aci@sha256:<hex>
+  # (spec T4: replaces bare atlas-aci@sha256:<digest> which resolved to
+  #  docker.io/library/atlas-aci — a non-existent image that 404s).
   # Host-side bind paths are written as absolute literals at install
   # time (the cwd is the project root). Earlier releases used the
   # `${workspaceFolder}` VSCode-style placeholder, which Cursor expands
@@ -488,7 +508,8 @@ container_json_fragment() {
   # unambiguous across hosts; the trade-off is per-machine .mcp.json
   # bodies (re-run `eidolons atlas aci install` after relocating).
   local rt="$1" digest="$2"
-  jq -n --arg rt "$rt" --arg digest "$digest" --arg ws "$PWD" '{
+  local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
+  jq -n --arg rt "$rt" --arg image_ref "$image_ref" --arg ws "$PWD" '{
     command: $rt,
     args: [
       "run",
@@ -499,7 +520,7 @@ container_json_fragment() {
       ($ws + ":/repo:ro"),
       "-v",
       ($ws + "/.atlas/memex:/memex"),
-      ("atlas-aci@sha256:" + $digest),
+      $image_ref,
       "serve",
       "--repo",
       "/repo",
@@ -640,9 +661,13 @@ run_index_container() {
   # wrong owner (D6 / R8 mitigation).
   mkdir -p ".atlas/memex"
 
+  # Use registry-prefixed image reference (spec T4).
+  local _index_image_ref
+  _index_image_ref="$(image_full_ref)"
+
   if ! "$RUNTIME" run --rm \
          -v "${PWD}:/repo" \
-         "atlas-aci@sha256:${LOCAL_DIGEST}" \
+         "$_index_image_ref" \
          index \
          --repo /repo \
          --langs ruby,python,javascript,typescript >&2; then
@@ -687,7 +712,7 @@ _json_body_matches_uv() {
 
 # _json_body_matches_container FILE RUNTIME DIGEST — returns 0 if the
 # atlas-aci entry matches the container canonical body for the given
-# runtime and digest.
+# runtime and digest (registry-prefixed form, spec T4).
 _json_body_matches_container() {
   local target="$1" rt="$2" digest="$3"
   [ -f "$target" ] || return 1
@@ -696,6 +721,33 @@ _json_body_matches_container() {
   [ -n "$actual" ] || return 1
   canonical="$(container_json_fragment "$rt" "$digest" | jq -S .)"
   [ "$actual" = "$canonical" ]
+}
+
+# _json_body_matches_container_legacy FILE RUNTIME DIGEST — transition-window
+# comparator (spec T4): accepts the OLD bare-ref form
+# ("atlas-aci@sha256:<hex>") written by versions before 1.3.0.
+# Once 1.3.0 ships and consumers re-run --container, the bare-ref body
+# is overwritten; this matcher can be dropped in a follow-up release.
+# DIGEST is the full sha256:... string; legacy bodies used the hex portion only.
+_json_body_matches_container_legacy() {
+  local target="$1" rt="$2" digest="$3"
+  [ -f "$target" ] || return 1
+  local actual hex_only legacy_canonical
+  actual="$(jq -S '.mcpServers["atlas-aci"] // empty' "$target" 2>/dev/null)"
+  [ -n "$actual" ] || return 1
+  # Strip "sha256:" prefix to get bare hex for legacy comparison.
+  hex_only="$(printf '%s' "$digest" | sed 's/^sha256://')"
+  legacy_canonical="$(jq -n --arg rt "$rt" --arg hex "$hex_only" '{
+    command: $rt,
+    args: [
+      "run", "--rm", "-i", "--read-only",
+      "-v", "${workspaceFolder}:/repo:ro",
+      "-v", "${workspaceFolder}/.atlas/memex:/memex",
+      ("atlas-aci@sha256:" + $hex),
+      "serve", "--repo", "/repo", "--memex-root", "/memex"
+    ]
+  }' | jq -S .)"
+  [ "$actual" = "$legacy_canonical" ]
 }
 
 json_install() {
@@ -730,29 +782,34 @@ json_install() {
     fi
 
     # R2 mitigation for JSON: if atlas-aci entry exists and matches neither
-    # uv canonical nor container canonical, refuse (fail-closed).
+    # uv canonical nor container canonical (including legacy bare-ref form),
+    # refuse (fail-closed). Spec T4: accept BOTH registry-prefixed AND legacy
+    # bare-ref form during the 1.3.0 transition window.
     if jq -e '.mcpServers["atlas-aci"] // empty' "$target" >/dev/null 2>&1; then
-      local _uv_match=false _ct_match=false
+      local _uv_match=false _ct_match=false _ct_legacy_match=false
       _json_body_matches_uv "$target" && _uv_match=true || true
       if [ "$CONTAINER_MODE" = "true" ]; then
         _json_body_matches_container "$target" "$RUNTIME" "$LOCAL_DIGEST" && _ct_match=true || true
+        _json_body_matches_container_legacy "$target" "$RUNTIME" "$LOCAL_DIGEST" && _ct_legacy_match=true || true
       fi
-      # If the existing entry matches the intended canonical, it's already correct.
+      # If the existing entry matches the intended canonical (or legacy), it's acceptable.
       if [ "$CONTAINER_MODE" = "true" ] && [ "$_ct_match" = "true" ]; then
         rm -f "$tmp"
         info "$target already has correct container atlas-aci entry — skipping"
         return 0
       fi
-      if [ "$CONTAINER_MODE" = "false" ] && [ "$_uv_match" = "true" ]; then
+      if [ "$CONTAINER_MODE" = "true" ] && [ "$_ct_legacy_match" = "true" ]; then
+        # Legacy bare-ref form detected — overwrite with registry-prefixed form.
+        info "$target has legacy bare-ref container entry — upgrading to registry-prefixed form"
+      elif [ "$CONTAINER_MODE" = "false" ] && [ "$_uv_match" = "true" ]; then
         rm -f "$tmp"
         info "$target already has correct uv atlas-aci entry — skipping"
         return 0
-      fi
-      # Neither matches — this is a hand-edited or cross-mode body.
-      # We still overwrite in cross-mode (uv→container or container→uv)
-      # because the user explicitly requested the new mode. We only
-      # refuse on truly foreign edits (neither canonical).
-      if [ "$_uv_match" = "false" ] && [ "$_ct_match" = "false" ]; then
+      elif [ "$_uv_match" = "false" ] && [ "$_ct_match" = "false" ] && [ "$_ct_legacy_match" = "false" ]; then
+        # Neither matches — this is a hand-edited or cross-mode body.
+        # We still overwrite in cross-mode (uv→container or container→uv)
+        # because the user explicitly requested the new mode. We only
+        # refuse on truly foreign edits (neither canonical).
         if [ "$CONTAINER_MODE" = "true" ]; then
           # Container install: also accept if it was a valid uv canonical
           # (mode switch scenario — G11).  Since _uv_match=false here,
@@ -866,7 +923,7 @@ copilot_list_all_agents() {
 _copilot_command_array() {
   # $1 = mode: "uv" or "container"
   # $2 (container only) = runtime
-  # $3 (container only) = digest
+  # $3 (container only) = digest (full sha256:... string)
   # Absolute project path baked at install time — see notes on
   # container_json_fragment for why.
   if [ "$1" = "uv" ]; then
@@ -874,11 +931,13 @@ _copilot_command_array() {
       '["atlas-aci", "serve", "--repo", $ws, "--memex-root", ($ws + "/.atlas/memex")]'
   else
     local rt="$2" digest="$3"
-    jq -n --arg rt "$rt" --arg digest "$digest" --arg ws "$PWD" \
+    # Registry-prefixed image reference (spec T4).
+    local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
+    jq -n --arg rt "$rt" --arg image_ref "$image_ref" --arg ws "$PWD" \
       '[$rt, "run", "--rm", "-i", "--read-only",
         "-v", ($ws + ":/repo:ro"),
         "-v", ($ws + "/.atlas/memex:/memex"),
-        ("atlas-aci@sha256:" + $digest),
+        $image_ref,
         "serve", "--repo", "/repo", "--memex-root", "/memex"]'
   fi
 }
@@ -1043,10 +1102,26 @@ _codex_canonical_body_uv() {
 # _codex_canonical_body_container RUNTIME DIGEST — canonical TOML body
 # for container mode (no heading). Absolute project path baked at
 # install time — same rationale as container_json_fragment.
+# DIGEST is the full sha256:... string; image ref is registry-prefixed
+# (spec T4): ghcr.io/rynaro/atlas-aci@sha256:<hex>.
 _codex_canonical_body_container() {
   local rt="$1" digest="$2"
+  local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
   printf 'command = "%s"\n' "$rt"
-  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "atlas-aci@sha256:%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$digest"
+  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$image_ref"
+}
+
+# _codex_canonical_body_container_legacy RUNTIME DIGEST — the OLD bare-ref
+# TOML body written before 1.3.0 (spec T4 transition-window comparator).
+# DIGEST is the full sha256:... string; legacy bodies used bare hex and
+# the ${workspaceFolder} placeholder (pre-1.2.1 ATLAS). Used only by the
+# R2 comparator to detect and upgrade stale installs.
+_codex_canonical_body_container_legacy() {
+  local rt="$1" digest="$2"
+  local hex_only
+  hex_only="$(printf '%s' "$digest" | sed 's/^sha256://')"
+  printf 'command = "%s"\n' "$rt"
+  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "${workspaceFolder}:/repo:ro", "-v", "${workspaceFolder}/.atlas/memex:/memex", "atlas-aci@sha256:%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$hex_only"
 }
 
 # _codex_canonical_body — returns the canonical body for the current mode.
@@ -1094,20 +1169,25 @@ wire_codex() {
 
   mkdir -p "$(dirname "$target")"
 
-  # R2 mitigation: if the heading already exists, compare against both
-  # canonical forms. Accept if either matches. Refuse only if neither.
+  # R2 mitigation: if the heading already exists, compare against all
+  # canonical forms (registry-prefixed + legacy bare-ref for transition
+  # window, spec T4). Accept if any matches. Refuse only if none match.
   if [ "$existed" = "true" ] && _codex_has_table "$target"; then
-    local actual_body uv_body ct_body
+    local actual_body uv_body ct_body ct_legacy_body
     actual_body="$(_codex_table_body "$target")"
     uv_body="$(_codex_canonical_body_uv)"
     if [ "$CONTAINER_MODE" = "true" ]; then
       ct_body="$(_codex_canonical_body_container "$RUNTIME" "$LOCAL_DIGEST")"
+      ct_legacy_body="$(_codex_canonical_body_container_legacy "$RUNTIME" "$LOCAL_DIGEST")"
       if [ "$actual_body" = "$ct_body" ]; then
-        # Already correctly installed as container mode.
+        # Already correctly installed as container mode (registry-prefixed).
         info "codex: [mcp_servers.atlas-aci] already correct (container) in $target — skipping"
         return 0
       fi
-      if [ "$actual_body" = "$uv_body" ]; then
+      if [ "$actual_body" = "$ct_legacy_body" ]; then
+        # Legacy bare-ref form — upgrade to registry-prefixed form.
+        info "codex: upgrading legacy bare-ref container entry to registry-prefixed form in $target"
+      elif [ "$actual_body" = "$uv_body" ]; then
         # Was uv mode — now switching to container. Allow overwrite.
         info "codex: switching from uv mode to container mode in $target"
       else
