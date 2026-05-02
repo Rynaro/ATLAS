@@ -520,6 +520,10 @@ container_json_fragment() {
       ($ws + ":/repo:ro"),
       "-v",
       ($ws + "/.atlas/memex:/memex"),
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
       $image_ref,
       "serve",
       "--repo",
@@ -667,6 +671,8 @@ run_index_container() {
 
   if ! "$RUNTIME" run --rm \
          -v "${PWD}:/repo" \
+         --cap-drop ALL \
+         --security-opt no-new-privileges \
          "$_index_image_ref" \
          index \
          --repo /repo \
@@ -937,6 +943,8 @@ _copilot_command_array() {
       '[$rt, "run", "--rm", "-i", "--read-only",
         "-v", ($ws + ":/repo:ro"),
         "-v", ($ws + "/.atlas/memex:/memex"),
+        "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges",
         $image_ref,
         "serve", "--repo", "/repo", "--memex-root", "/memex"]'
   fi
@@ -1108,7 +1116,7 @@ _codex_canonical_body_container() {
   local rt="$1" digest="$2"
   local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
   printf 'command = "%s"\n' "$rt"
-  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$image_ref"
+  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$image_ref"
 }
 
 # _codex_canonical_body_container_legacy RUNTIME DIGEST — the OLD bare-ref

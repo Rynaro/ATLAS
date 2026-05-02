@@ -1085,6 +1085,34 @@ esac'
     jq . ".mcp.json"
     return 1
   }
+
+  # H3: --cap-drop ALL must appear in the args array.
+  run jq -r '.mcpServers["atlas-aci"].args | index("--cap-drop")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: --cap-drop missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  run jq -r '.mcpServers["atlas-aci"].args | index("ALL")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: ALL (cap-drop value) missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+
+  # H3: --security-opt no-new-privileges must appear in the args array.
+  run jq -r '.mcpServers["atlas-aci"].args | index("--security-opt")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: --security-opt missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  run jq -r '.mcpServers["atlas-aci"].args | index("no-new-privileges")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: no-new-privileges missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
 }
 
 @test "T4: .codex/config.toml container canonical body uses ghcr.io/rynaro/atlas-aci@sha256:" {
@@ -1113,6 +1141,28 @@ esac'
     cat ".codex/config.toml"
     return 1
   fi
+
+  # H3: security flags must appear in the TOML args line.
+  grep -q '"--cap-drop"' ".codex/config.toml" || {
+    echo "H3: --cap-drop missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+  grep -q '"ALL"' ".codex/config.toml" || {
+    echo "H3: ALL (cap-drop value) missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+  grep -q '"--security-opt"' ".codex/config.toml" || {
+    echo "H3: --security-opt missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+  grep -q '"no-new-privileges"' ".codex/config.toml" || {
+    echo "H3: no-new-privileges missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
 }
 
 @test "T4: fail-closed comparator accepts legacy bare-ref body (transition window)" {
@@ -1157,4 +1207,120 @@ EOF
     jq . ".mcp.json"
     return 1
   }
+}
+
+# ─── H3 — Security-flag hardening (spec H3 / ATLAS 1.3.0) ────────────────
+# These tests assert:
+#   1. --cap-drop ALL and --security-opt no-new-privileges appear in the
+#      rendered canonical body for .mcp.json, .codex/config.toml, and
+#      the copilot agent.md output.
+#   2. Negative: --privileged, --cap-add, and --security-opt seccomp=unconfined
+#      must NOT appear in any canonical body (escalation-flag guard).
+
+@test "H3: copilot agent.md canonical body includes --cap-drop ALL and --security-opt no-new-privileges" {
+  setup_fresh_project
+  setup_container_stubs
+  # Set up a copilot .agent.md file with the required frontmatter.
+  mkdir -p ".github/agents"
+  cat > ".github/agents/atlas.agent.md" <<'EOF'
+---
+name: atlas-aci
+tools:
+  mcp_servers: []
+---
+ATLAS agent.
+EOF
+
+  run_aci --install --container --runtime docker --host copilot --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  local agent_file=".github/agents/atlas.agent.md"
+  [ -f "$agent_file" ] || { echo "$agent_file was not found"; return 1; }
+
+  # The command field in the YAML frontmatter must contain the security flags.
+  grep -q '\-\-cap-drop' "$agent_file" || {
+    echo "H3: --cap-drop missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+  grep -q 'ALL' "$agent_file" || {
+    echo "H3: ALL (cap-drop value) missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+  grep -q '\-\-security-opt' "$agent_file" || {
+    echo "H3: --security-opt missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+  grep -q 'no-new-privileges' "$agent_file" || {
+    echo "H3: no-new-privileges missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+}
+
+@test "H3: canonical body must NOT include escalation flags (--privileged, --cap-add, seccomp=unconfined)" {
+  # Negative test: no escalation flags must appear in the rendered canonical
+  # body for .mcp.json or .codex/config.toml.
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  mkdir -p .codex
+
+  # Install claude-code host (writes .mcp.json).
+  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Install codex host (writes .codex/config.toml).
+  run_aci --install --container --runtime docker --host codex --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0 (codex), got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # .mcp.json must not contain escalation flags.
+  run jq -r '.mcpServers["atlas-aci"].args | .[]' ".mcp.json"
+  printf '%s\n' "$output" | grep -q -- '--privileged' && {
+    echo "ESCALATION: --privileged found in .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  printf '%s\n' "$output" | grep -q -- '--cap-add' && {
+    echo "ESCALATION: --cap-add found in .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  printf '%s\n' "$output" | grep -q 'seccomp=unconfined' && {
+    echo "ESCALATION: seccomp=unconfined found in .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+
+  # .codex/config.toml must not contain escalation flags.
+  if grep -q -- '--privileged' ".codex/config.toml" 2>/dev/null; then
+    echo "ESCALATION: --privileged found in .codex/config.toml"
+    cat ".codex/config.toml"
+    return 1
+  fi
+  if grep -q -- '--cap-add' ".codex/config.toml" 2>/dev/null; then
+    echo "ESCALATION: --cap-add found in .codex/config.toml"
+    cat ".codex/config.toml"
+    return 1
+  fi
+  if grep -q 'seccomp=unconfined' ".codex/config.toml" 2>/dev/null; then
+    echo "ESCALATION: seccomp=unconfined found in .codex/config.toml"
+    cat ".codex/config.toml"
+    return 1
+  fi
+  true
 }

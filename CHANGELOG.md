@@ -46,7 +46,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **Fail-closed comparator (R2) — transition window:** The comparator now
   accepts BOTH the old bare-ref body (legacy, from before 1.3.0) AND the new
   registry-prefixed body. On detecting a legacy body, it upgrades rather than
-  refuses.
+  refuses. Once consumers re-run `--container` with 1.3.0, the bare-ref form
+  is overwritten; the legacy matcher can be dropped in a follow-up release.
 - **`EIDOLON_VERSION`** bumped `1.2.2 → 1.3.0`.
 - **`ATLAS_VERSION`** in `commands/aci.sh` bumped `1.2.2 → 1.3.0`.
 
