@@ -56,8 +56,9 @@ case "\$1" in
       exit 0
     fi
     # Repository:Tag format query.
+    # T4: image_tag() now returns ghcr.io/rynaro/atlas-aci:<version>.
     if [ -f "${sentinel}" ]; then
-      printf 'atlas-aci:1.2.2\n'
+      printf 'ghcr.io/rynaro/atlas-aci:1.3.0\n'
     fi
     exit 0
     ;;
@@ -588,44 +589,38 @@ EOF
 
 # ─── G19 ─────────────────────────────────────────────────────────────────
 
-@test "G19: different digest on second run triggers host config update" {
+@test "G19: container install writes registry-prefixed image ref to .mcp.json" {
   setup_fresh_project
   seed_claude_host
 
-  # First run: build with FAKE_DIGEST.
+  # T4: digest is now the ATLAS_ACI_IMAGE_DIGEST constant, not captured from
+  # the local docker store. Verify the written .mcp.json uses the full
+  # registry-prefixed form: ghcr.io/rynaro/atlas-aci@sha256:<hex>.
   install_stub "git" 0
-  install_docker_stub "$FAKE_DIGEST"
+  install_docker_stub
 
   run_aci --install --container --runtime docker --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ] || { echo ".mcp.json not created on first install"; return 1; }
 
-  run jq -r '.mcpServers["atlas-aci"].args | .[] | select(startswith("atlas-aci@sha256:"))' ".mcp.json"
-  local first_ref="$output"
-  [[ "$first_ref" == *"$FAKE_DIGEST"* ]] || {
-    echo "Expected first digest $FAKE_DIGEST in .mcp.json, got: $first_ref"
-    cat ".mcp.json"
+  # The args must contain ghcr.io/rynaro/atlas-aci@sha256: (registry-prefixed).
+  run jq -r '.mcpServers["atlas-aci"].args | .[] | select(startswith("ghcr.io/rynaro/atlas-aci@sha256:"))' ".mcp.json"
+  local ref="$output"
+  [ -n "$ref" ] || {
+    echo "Expected ghcr.io/rynaro/atlas-aci@sha256:... in .mcp.json args, got nothing."
+    jq . ".mcp.json"
+    return 1
+  }
+  [[ "$ref" == "ghcr.io/rynaro/atlas-aci@sha256:"* ]] || {
+    echo "Expected registry-prefixed image ref in .mcp.json, got: $ref"
+    jq . ".mcp.json"
     return 1
   }
 
-  # Second run: reinstall docker stub with FAKE_DIGEST_V2.
-  # Remove the sentinel so image_exists() returns false → forces rebuild.
-  rm -f "$BATS_TEST_TMPDIR/docker.sentinel"
-  install_docker_stub "$FAKE_DIGEST_V2"
-
-  run_aci --install --container --runtime docker --non-interactive
-  [ "$status" -eq 0 ]
-
-  run jq -r '.mcpServers["atlas-aci"].args | .[] | select(startswith("atlas-aci@sha256:"))' ".mcp.json"
-  local second_ref="$output"
-  [[ "$second_ref" == *"$FAKE_DIGEST_V2"* ]] || {
-    echo "Expected updated digest $FAKE_DIGEST_V2 in .mcp.json, got: $second_ref"
-    cat ".mcp.json"
-    return 1
-  }
-
-  [ "$first_ref" != "$second_ref" ] || {
-    echo "Digest did not change between runs (both: $first_ref)"
+  # The command must be 'docker' (container mode).
+  run jq -r '.mcpServers["atlas-aci"].command' ".mcp.json"
+  [ "$output" = "docker" ] || {
+    echo "Expected 'docker' command in .mcp.json, got: $output"
     return 1
   }
 }
@@ -776,7 +771,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.2)"* ]] || {
+  [[ "$output" == *"Mode: container (docker, ghcr.io/rynaro/atlas-aci:1.3.0)"* ]] || {
     echo "Expected container-mode banner:"
     printf '%s\n' "$output"
     return 1
@@ -1048,4 +1043,284 @@ esac'
     return 1
   }
   [[ "$output" == *"Conflicting actions"* ]]
+}
+
+# ─── T4 — Registry-prefixed canonical body (spec T4 / ATLAS 1.3.0) ───────
+# These tests assert:
+#   1. .mcp.json canonical body contains ghcr.io/rynaro/atlas-aci@sha256:
+#   2. .codex/config.toml canonical body contains the registry-prefixed form
+#   3. The fail-closed comparator accepts both legacy (bare-ref) and
+#      registry-prefixed forms during the 1.3.0 transition window.
+
+@test "T4: .mcp.json container canonical body uses ghcr.io/rynaro/atlas-aci@sha256:" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [ -f ".mcp.json" ] || { echo ".mcp.json was not created"; return 1; }
+
+  # The args array must contain the registry-prefixed image reference.
+  run jq -r '.mcpServers["atlas-aci"].args | .[] | select(startswith("ghcr.io/rynaro/atlas-aci@sha256:"))' ".mcp.json"
+  [ -n "$output" ] || {
+    echo ".mcp.json args do not contain ghcr.io/rynaro/atlas-aci@sha256:..."
+    jq . ".mcp.json"
+    return 1
+  }
+  [[ "$output" == "ghcr.io/rynaro/atlas-aci@sha256:"* ]] || {
+    echo "Expected registry-prefixed ref, got: $output"
+    return 1
+  }
+
+  # The bare-ref form (atlas-aci@sha256:) must NOT appear (regression guard).
+  run jq -r '.mcpServers["atlas-aci"].args | .[] | select(startswith("atlas-aci@sha256:"))' ".mcp.json"
+  [ -z "$output" ] || {
+    echo "Found legacy bare-ref atlas-aci@sha256: in .mcp.json — T4 regression:"
+    printf '%s\n' "$output"
+    jq . ".mcp.json"
+    return 1
+  }
+
+  # H3: --cap-drop ALL must appear in the args array.
+  run jq -r '.mcpServers["atlas-aci"].args | index("--cap-drop")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: --cap-drop missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  run jq -r '.mcpServers["atlas-aci"].args | index("ALL")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: ALL (cap-drop value) missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+
+  # H3: --security-opt no-new-privileges must appear in the args array.
+  run jq -r '.mcpServers["atlas-aci"].args | index("--security-opt")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: --security-opt missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  run jq -r '.mcpServers["atlas-aci"].args | index("no-new-privileges")' ".mcp.json"
+  [ "$output" != "null" ] || {
+    echo "H3: no-new-privileges missing from .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+}
+
+@test "T4: .codex/config.toml container canonical body uses ghcr.io/rynaro/atlas-aci@sha256:" {
+  setup_fresh_project
+  setup_container_stubs
+  mkdir -p .codex
+
+  run_aci --install --container --runtime docker --host codex --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [ -f ".codex/config.toml" ] || { echo ".codex/config.toml was not created"; return 1; }
+
+  # The args line must contain the registry-prefixed image reference.
+  grep -q 'ghcr\.io/rynaro/atlas-aci@sha256:' ".codex/config.toml" || {
+    echo ".codex/config.toml does not contain ghcr.io/rynaro/atlas-aci@sha256:"
+    cat ".codex/config.toml"
+    return 1
+  }
+
+  # The bare-ref form must NOT appear (regression guard).
+  if grep -q '"atlas-aci@sha256:' ".codex/config.toml"; then
+    echo "Found legacy bare-ref atlas-aci@sha256: in .codex/config.toml — T4 regression:"
+    cat ".codex/config.toml"
+    return 1
+  fi
+
+  # H3: security flags must appear in the TOML args line.
+  grep -q '"--cap-drop"' ".codex/config.toml" || {
+    echo "H3: --cap-drop missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+  grep -q '"ALL"' ".codex/config.toml" || {
+    echo "H3: ALL (cap-drop value) missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+  grep -q '"--security-opt"' ".codex/config.toml" || {
+    echo "H3: --security-opt missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+  grep -q '"no-new-privileges"' ".codex/config.toml" || {
+    echo "H3: no-new-privileges missing from .codex/config.toml args"
+    cat ".codex/config.toml"
+    return 1
+  }
+}
+
+@test "T4: fail-closed comparator accepts legacy bare-ref body (transition window)" {
+  # Spec T4: the comparator accepts BOTH the old bare-ref body AND the
+  # new registry-prefixed body during the 1.3.0 transition window. A
+  # pre-existing .mcp.json with the legacy bare-ref form must be upgraded
+  # (not refused) when --container is re-run.
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+
+  # Seed .mcp.json with the legacy bare-ref container body (pre-1.3.0 form).
+  cat > ".mcp.json" <<'EOF'
+{
+  "mcpServers": {
+    "atlas-aci": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i", "--read-only",
+        "-v", "${workspaceFolder}:/repo:ro",
+        "-v", "${workspaceFolder}/.atlas/memex:/memex",
+        "atlas-aci@sha256:aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+        "serve", "--repo", "/repo", "--memex-root", "/memex"
+      ]
+    }
+  }
+}
+EOF
+
+  # Re-run --container: should NOT refuse; should upgrade to registry-prefixed form.
+  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0 (legacy body accepted + upgraded), got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # After upgrade, the args must contain the registry-prefixed form.
+  run jq -r '.mcpServers["atlas-aci"].args | .[] | select(startswith("ghcr.io/rynaro/atlas-aci@sha256:"))' ".mcp.json"
+  [ -n "$output" ] || {
+    echo "After legacy-upgrade, expected ghcr.io/rynaro/atlas-aci@sha256: in .mcp.json"
+    jq . ".mcp.json"
+    return 1
+  }
+}
+
+# ─── H3 — Security-flag hardening (spec H3 / ATLAS 1.3.0) ────────────────
+# These tests assert:
+#   1. --cap-drop ALL and --security-opt no-new-privileges appear in the
+#      rendered canonical body for .mcp.json, .codex/config.toml, and
+#      the copilot agent.md output.
+#   2. Negative: --privileged, --cap-add, and --security-opt seccomp=unconfined
+#      must NOT appear in any canonical body (escalation-flag guard).
+
+@test "H3: copilot agent.md canonical body includes --cap-drop ALL and --security-opt no-new-privileges" {
+  setup_fresh_project
+  setup_container_stubs
+  # Set up a copilot .agent.md file with the required frontmatter.
+  mkdir -p ".github/agents"
+  cat > ".github/agents/atlas.agent.md" <<'EOF'
+---
+name: atlas-aci
+tools:
+  mcp_servers: []
+---
+ATLAS agent.
+EOF
+
+  run_aci --install --container --runtime docker --host copilot --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  local agent_file=".github/agents/atlas.agent.md"
+  [ -f "$agent_file" ] || { echo "$agent_file was not found"; return 1; }
+
+  # The command field in the YAML frontmatter must contain the security flags.
+  grep -q '\-\-cap-drop' "$agent_file" || {
+    echo "H3: --cap-drop missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+  grep -q 'ALL' "$agent_file" || {
+    echo "H3: ALL (cap-drop value) missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+  grep -q '\-\-security-opt' "$agent_file" || {
+    echo "H3: --security-opt missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+  grep -q 'no-new-privileges' "$agent_file" || {
+    echo "H3: no-new-privileges missing from $agent_file"
+    cat "$agent_file"
+    return 1
+  }
+}
+
+@test "H3: canonical body must NOT include escalation flags (--privileged, --cap-add, seccomp=unconfined)" {
+  # Negative test: no escalation flags must appear in the rendered canonical
+  # body for .mcp.json or .codex/config.toml.
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+  mkdir -p .codex
+
+  # Install claude-code host (writes .mcp.json).
+  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Install codex host (writes .codex/config.toml).
+  run_aci --install --container --runtime docker --host codex --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0 (codex), got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # .mcp.json must not contain escalation flags.
+  run jq -r '.mcpServers["atlas-aci"].args | .[]' ".mcp.json"
+  printf '%s\n' "$output" | grep -q -- '--privileged' && {
+    echo "ESCALATION: --privileged found in .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  printf '%s\n' "$output" | grep -q -- '--cap-add' && {
+    echo "ESCALATION: --cap-add found in .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+  printf '%s\n' "$output" | grep -q 'seccomp=unconfined' && {
+    echo "ESCALATION: seccomp=unconfined found in .mcp.json args"
+    jq . ".mcp.json"
+    return 1
+  }
+
+  # .codex/config.toml must not contain escalation flags.
+  if grep -q -- '--privileged' ".codex/config.toml" 2>/dev/null; then
+    echo "ESCALATION: --privileged found in .codex/config.toml"
+    cat ".codex/config.toml"
+    return 1
+  fi
+  if grep -q -- '--cap-add' ".codex/config.toml" 2>/dev/null; then
+    echo "ESCALATION: --cap-add found in .codex/config.toml"
+    cat ".codex/config.toml"
+    return 1
+  fi
+  if grep -q 'seccomp=unconfined' ".codex/config.toml" 2>/dev/null; then
+    echo "ESCALATION: seccomp=unconfined found in .codex/config.toml"
+    cat ".codex/config.toml"
+    return 1
+  fi
+  true
 }
