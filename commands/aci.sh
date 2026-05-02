@@ -1552,12 +1552,11 @@ detect_index_mode() {
 main_index() {
   detect_index_mode
 
-  # Container mode reads LOCAL_DIGEST (set by capture_local_digest) for
-  # the @sha256:<digest> pin in run_index_container. Skip the digest
-  # capture in dry-run — run_index short-circuits to emit_action before
-  # touching LOCAL_DIGEST.
+  # Container mode uses the registry digest constant as LOCAL_DIGEST for
+  # the @sha256:<digest> pin in run_index_container (spec T4: registry
+  # digest, not local image ID).
   if [ "$CONTAINER_MODE" = "true" ] && [ "$DRY_RUN" != "true" ]; then
-    LOCAL_DIGEST="$(capture_local_digest)" || \
+    LOCAL_DIGEST="$(capture_registry_digest)" || \
       exit_prereq "atlas-aci: $(image_tag) image disappeared from $RUNTIME between detection and indexing.
   Fix: eidolons atlas aci install --container --runtime $RUNTIME"
   fi

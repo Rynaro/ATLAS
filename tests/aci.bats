@@ -771,7 +771,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker, atlas-aci:1.2.2)"* ]] || {
+  [[ "$output" == *"Mode: container (docker, ghcr.io/rynaro/atlas-aci:1.3.0)"* ]] || {
     echo "Expected container-mode banner:"
     printf '%s\n' "$output"
     return 1
