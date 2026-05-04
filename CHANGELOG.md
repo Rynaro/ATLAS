@@ -9,7 +9,43 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- **`commands/aci.sh` container index: pre-create `.atlas/memex/` + add `-u UID:GID`
+  (P-A fix, spec atlas-aci-mcp-install-fix-2026-05-04 T4 / S2):**
+  On a fresh project where `.atlas/memex/` does not pre-exist, rootful Docker
+  (Fedora) creates the bind-mount directory as root-owned inside the container,
+  preventing the in-container user from writing `codegraph.db`. The fix
+  pre-creates `.atlas/memex/` on the host before the `docker run` and adds
+  `-u "$(id -u):$(id -g)"` to the index `docker run` so the container writes
+  with the host user's ownership. Also adds a writable `-v .atlas/memex:/memex`
+  bind for consistency with the `serve` configuration.
+
+- **`commands/aci.sh` image reuse: skip `docker build` when pinned image already
+  loaded (P-B fix, spec S1):**
+  Before invoking `docker build`, `ensure_image` now resolves the pinned image
+  ref (from `.mcp.json`, optional `eidolons mcp atlas-aci --print-pinned-ref`,
+  or the `ATLAS_ACI_IMAGE_DIGEST` constant) and runs `docker image inspect
+  <ref>`. If the image is already in the local store (e.g. from a prior
+  `eidolons mcp atlas-aci pull`), the build is skipped entirely, eliminating the
+  redundant multi-minute rebuild that produced the same digest.
+
 ### Added
+
+- **`commands/aci.sh` header invariant comment:** Documents the fail-closed write
+  boundary ("No MCP config files were modified.") as a pinned invariant.
+- **`_resolve_pinned_image_ref` function in `commands/aci.sh`:** Resolves the
+  image ref to check from `.mcp.json`, optional nexus CLI, or constant fallback
+  (Bash 3.2 safe).
+- **Three new bats cases in `tests/aci.bats`:**
+  - T4-1: fresh project — `.atlas/memex/` created before docker run; docker run
+    contains `-u` and a writable `/memex` bind.
+  - T4-2: image already loaded (inspect-only sentinel) — `docker build` not
+    invoked; "image already loaded" in stderr.
+  - T4-3: index failure — no MCP config files written; verbatim error strings;
+    non-zero exit.
+
+### Added (earlier, preserved from prior Unreleased section)
 
 - **`.github/workflows/release.yml`** — adopts the eidolons-nexus
   release-integrity contract by wrapping the reusable

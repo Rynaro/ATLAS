@@ -9,6 +9,10 @@
 # Rynaro/eidolons nexus repo. Section anchors throughout this file point
 # at the governing clauses.
 #
+# INVARIANT: on container index failure, exit BEFORE writing any host-wiring
+# file. The verbatim "No MCP config files were modified." string is pinned
+# by tests. Violating this is a P0 bug (D6 / R6 in atlas-aci-mcp-install-fix).
+#
 # ═══════════════════════════════════════════════════════════════════════════
 # IMPORTANT INVARIANTS (violating these is a P0 bug):
 #   - Layer-2 write boundary (P4 / D3): NEVER write outside $PWD.
@@ -420,6 +424,40 @@ image_tag() { printf "%s:%s" "$ATLAS_ACI_IMAGE_REF" "$ATLAS_VERSION"; }
 # ATLAS_ACI_IMAGE_DIGEST.
 image_full_ref() { printf "%s@%s" "$ATLAS_ACI_IMAGE_REF" "$ATLAS_ACI_IMAGE_DIGEST"; }
 
+# _resolve_pinned_image_ref — echoes the fully-qualified image ref to use
+# for the current install. Resolution order (D3 from atlas-aci-mcp-install-fix):
+#   1. Parse <cwd>/.mcp.json for a ghcr.io/rynaro/atlas-aci@sha256:... arg
+#      (written by a prior `eidolons mcp atlas-aci` run — most up-to-date).
+#   2. Optional: query `eidolons mcp atlas-aci --print-pinned-ref` if the
+#      nexus CLI is on PATH (T2 from atlas-aci-mcp-install-fix). Absent or
+#      non-zero exit is benign — treated as fallback.
+#   3. Fallback: compose from ATLAS_ACI_IMAGE_REF + ATLAS_ACI_IMAGE_DIGEST
+#      constants (always safe, mirrors nexus source-of-truth at pin time).
+# Bash 3.2 safe: no associative arrays, no ${var,,}, no readarray.
+_resolve_pinned_image_ref() {
+  local _ref=""
+
+  # 1. Parse .mcp.json for a pinned digest ref.
+  if [ -f "./.mcp.json" ] && command -v jq >/dev/null 2>&1; then
+    _ref="$(jq -r '
+      .mcpServers["atlas-aci"].args[]?
+      | select(test("^ghcr\\.io/rynaro/atlas-aci@sha256:"))
+    ' "./.mcp.json" 2>/dev/null | head -n1)"
+  fi
+
+  # 2. Optional nexus CLI helper (T2 / atlas-aci-mcp-install-fix PR #1).
+  if [ -z "$_ref" ] && command -v eidolons >/dev/null 2>&1; then
+    _ref="$(eidolons mcp atlas-aci --print-pinned-ref 2>/dev/null)" || _ref=""
+  fi
+
+  # 3. Constant fallback (always present).
+  if [ -z "$_ref" ]; then
+    _ref="$(image_full_ref)"
+  fi
+
+  printf "%s" "$_ref"
+}
+
 # image_exists — returns 0 if the local tagged image exists.
 image_exists() {
   "$RUNTIME" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
@@ -467,13 +505,33 @@ build_image() {
 # Sets LOCAL_DIGEST global to the registry digest (ATLAS_ACI_IMAGE_DIGEST).
 # The digest is the registry pin constant, not captured from the local store.
 # (spec T4: replaces parent spec D3 local image ID capture.)
+#
+# Image-reuse short-circuit (P-B / atlas-aci-mcp-install-fix S1):
+# Before building, inspect the pinned digest ref via `docker image inspect`.
+# If the image is already loaded (e.g. from a prior `eidolons mcp atlas-aci pull`),
+# skip the build entirely. This avoids a redundant multi-minute rebuild that
+# produces the same digest as the already-loaded image.
 ensure_image() {
   # LOCAL_DIGEST holds the full sha256:... string from the registry constant.
   LOCAL_DIGEST="$(capture_registry_digest)"
 
+  # First: check the locally-tagged image (existing fast path).
   if image_exists; then
     info "Image $(image_tag) already present (registry digest: ${LOCAL_DIGEST})"
     return 0
+  fi
+
+  # Second: check the pinned digest ref directly (handles the pull-then-install
+  # case where `eidolons mcp atlas-aci pull` loaded the image by digest but the
+  # local tag may not exist yet).
+  if [ "$DRY_RUN" = "false" ]; then
+    local _pinned_ref
+    _pinned_ref="$(_resolve_pinned_image_ref)"
+    if "$RUNTIME" image inspect "$_pinned_ref" >/dev/null 2>&1; then
+      info "image already loaded — skipping build (${_pinned_ref})"
+      IMAGE_REF="$_pinned_ref"
+      return 0
+    fi
   fi
 
   # Image absent — build it.
@@ -655,16 +713,41 @@ run_index_uv() {
 
 run_index_container() {
   say "Indexing project with atlas-aci container (first run can take minutes)"
-  # mkdir -p .atlas/memex before running so daemon doesn't create it with
-  # wrong owner (D6 / R8 mitigation).
-  mkdir -p ".atlas/memex"
+
+  # Pre-create .atlas/memex/ on the HOST before the docker run so the daemon
+  # cannot create it as root-owned (P-A / atlas-aci-mcp-install-fix S2).
+  # .atlas/ itself is also pre-created because codegraph.py writes
+  # /repo/.atlas/graph.db — the container must be able to create that path,
+  # and a host-owned parent directory prevents a root-owned bind-shadow.
+  local memex_dir
+  memex_dir="$PWD/.atlas/memex"
+  if [ ! -d "$memex_dir" ]; then
+    mkdir -p "$memex_dir"
+  fi
 
   # Use registry-prefixed image reference (spec T4).
   local _index_image_ref
   _index_image_ref="$(image_full_ref)"
 
+  # Q1 resolution (probe a — read upstream Python source):
+  # atlas_aci/codegraph.py CodeGraph.__init__ sets
+  #   self.db_path = self.repo / ".atlas" / "graph.db"
+  # and calls self.db_path.parent.mkdir(...). The `index` CLI command does NOT
+  # accept --memex-root (only `serve` does). Therefore the ONLY write target for
+  # `index` is /repo/.atlas/graph.db — i.e., the repo bind mount.
+  # Consequence: /repo must be WRITABLE (no :ro) for the index run.
+  # /memex is mounted for future-proofing and consistency with the serve config,
+  # but index does not write there. --tmpfs /tmp is NOT needed (no /tmp writes
+  # observed in the source). --read-only is NOT added (removed in this fix).
+  #
+  # INVARIANT: on non-zero exit from this docker run, exit_index_fail is called
+  # BEFORE any MCP config file is written (A13 / D6). The verbatim strings
+  # "atlas-aci container index failed — aborting before MCP config writes." and
+  # "No MCP config files were modified." are pinned by tests.
   if ! "$RUNTIME" run --rm \
+         -u "$(id -u):$(id -g)" \
          -v "${PWD}:/repo" \
+         -v "${PWD}/.atlas/memex:/memex" \
          --cap-drop ALL \
          --security-opt no-new-privileges \
          "$_index_image_ref" \
