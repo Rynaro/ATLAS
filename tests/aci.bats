@@ -41,6 +41,9 @@ FAKE_DIGEST_V2="0011223344556677889900aabbccddee0011223344556677889900aabbccddee
 # The stub uses file sentinels so state is visible across child processes.
 _write_runtime_stub() {
   local name="$1" logfile="$2" sentinel="$3" build_fail_file="$4" fake_digest="$5"
+  # inspect_sentinel: separate file — set when image is loaded by digest but
+  # NOT tagged locally (simulates `eidolons mcp atlas-aci pull` scenario).
+  local inspect_sentinel="${sentinel}.inspect"
   cat > "$STUBS_DIR/$name" <<STUB
 #!/usr/bin/env bash
 # Auto-generated $name stub — tests/aci.bats
@@ -49,31 +52,42 @@ printf '%s\n' "\$*" >> "${logfile}"
 case "\$1" in
   images)
     if echo "\$*" | grep -q 'no-trunc'; then
-      # Return digest only if sentinel exists (image was built).
       if [ -f "${sentinel}" ]; then
         printf 'sha256:${fake_digest}\n'
       fi
       exit 0
     fi
-    # Repository:Tag format query.
-    # T4: image_tag() now returns ghcr.io/rynaro/atlas-aci:<version>.
+    # Repository:Tag format query (image_exists uses this path).
     if [ -f "${sentinel}" ]; then
       printf 'ghcr.io/rynaro/atlas-aci:1.3.0\n'
     fi
     exit 0
+    ;;
+  image)
+    # Handle: docker image inspect REF
+    # Used by ensure_image pinned-ref short-circuit (atlas-aci-mcp-install-fix S1/P-B).
+    # Returns 0 when either the build sentinel OR the inspect-only sentinel exists.
+    if [ -f "${sentinel}" ] || [ -f "${inspect_sentinel}" ]; then
+      exit 0
+    fi
+    exit 1
     ;;
   build)
     if [ -f "${build_fail_file}" ]; then
       printf 'simulated build error\n' >&2
       exit 1
     fi
-    # Mark image as existing.
     touch "${sentinel}"
     exit 0
     ;;
   run)
     # Simulate successful index / serve — create manifest.yaml if indexing.
+    # If the run-fail sentinel exists, exit non-zero (index-failure test).
     if echo "\$*" | grep -q 'index'; then
+      if [ -f "${sentinel}.run_fail" ]; then
+        printf 'simulated index error\n' >&2
+        exit 1
+      fi
       mkdir -p ./.atlas
       printf 'generated: true\n' > ./.atlas/manifest.yaml
     fi
@@ -108,6 +122,21 @@ install_docker_stub_prebuilt() {
 # set_docker_build_fail — next docker build will exit 1.
 set_docker_build_fail() {
   touch "$BATS_TEST_TMPDIR/docker.build_fail"
+}
+
+# install_docker_stub_digest_only — image is loaded by digest (docker image inspect returns 0)
+# but docker images (tagged) returns empty. Simulates `eidolons mcp atlas-aci pull` having
+# been run before `eidolons atlas aci --install`, which is the P-B scenario.
+install_docker_stub_digest_only() {
+  local fake_digest="${1:-$FAKE_DIGEST}"
+  install_docker_stub "$fake_digest"
+  touch "$BATS_TEST_TMPDIR/docker.sentinel.inspect"
+}
+
+# set_docker_index_run_fail — next docker run with 'index' arg exits 1.
+# Used by the "index failure: no MCP config files written" test.
+set_docker_index_run_fail() {
+  touch "$BATS_TEST_TMPDIR/docker.sentinel.run_fail"
 }
 
 # docker_build_count — number of times `docker build` was invoked.
@@ -1323,4 +1352,140 @@ EOF
     return 1
   fi
   true
+}
+
+# ─── T4 tests (atlas-aci-mcp-install-fix-2026-05-04) ─────────────────────
+# Three cases covering: fresh-project memex pre-creation + UID flag,
+# image-already-loaded build skip, and fail-closed write boundary.
+
+@test "T4-1: fresh project with no .atlas/memex/: index succeeds, docker run has -u and writable /memex" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+
+  # Confirm .atlas/memex does NOT exist before the install.
+  [ ! -d ".atlas/memex" ] || {
+    rm -rf .atlas
+  }
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # .atlas/memex must have been created.
+  [ -d ".atlas/memex" ] || {
+    echo ".atlas/memex was not created before docker run"
+    return 1
+  }
+
+  # The docker run line in docker.log must contain -u (UID:GID flag).
+  grep -q '\-u' "$BATS_TEST_TMPDIR/docker.log" || {
+    echo "docker run log missing -u flag:"
+    cat "$BATS_TEST_TMPDIR/docker.log"
+    return 1
+  }
+
+  # The /memex bind in docker.log must NOT have a :ro suffix
+  # (it must be writable — docker.log records args as a single space-separated line).
+  if grep '\.atlas/memex:/memex:ro' "$BATS_TEST_TMPDIR/docker.log" 2>/dev/null; then
+    echo "docker.log shows .atlas/memex:/memex:ro — memex mount must be writable:"
+    cat "$BATS_TEST_TMPDIR/docker.log"
+    return 1
+  fi
+  # And it must appear at all.
+  grep -q '\.atlas/memex:/memex' "$BATS_TEST_TMPDIR/docker.log" || {
+    echo "docker.log missing .atlas/memex:/memex mount:"
+    cat "$BATS_TEST_TMPDIR/docker.log"
+    return 1
+  }
+}
+
+@test "T4-2: image already loaded via docker image inspect: build is skipped" {
+  setup_fresh_project
+  # Stub with inspect-only sentinel — docker image inspect returns 0
+  # but docker images (tagged) returns empty. This simulates the P-B scenario
+  # where `eidolons mcp atlas-aci pull` loaded the image by digest reference
+  # but the local tag does not exist yet.
+  install_stub "git" 0
+  install_docker_stub_digest_only
+  seed_claude_host
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # docker build must NOT have been invoked.
+  local build_count
+  build_count="$(docker_build_count)"
+  [ "$build_count" -eq 0 ] || {
+    echo "Expected 0 docker build invocations, got $build_count:"
+    cat "$BATS_TEST_TMPDIR/docker.log"
+    return 1
+  }
+
+  # stderr (captured in $output by bats run) must mention "image already loaded".
+  [[ "$output" == *"image already loaded"* ]] || {
+    echo "Expected 'image already loaded' in stderr output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+}
+
+@test "T4-3: index failure: no MCP config files written, verbatim error strings on stderr, non-zero exit" {
+  setup_fresh_project
+  setup_container_stubs
+  set_docker_index_run_fail
+  seed_claude_host
+
+  # Capture pre-install state of config files that must NOT be created.
+  local mcp_before codex_before agents_before
+  mcp_before="$(cat ".mcp.json" 2>/dev/null || printf 'ABSENT')"
+  codex_before="$(cat ".codex/config.toml" 2>/dev/null || printf 'ABSENT')"
+  agents_before="$(cat "AGENTS.md" 2>/dev/null || printf 'ABSENT')"
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -ne 0 ] || {
+    echo "Expected non-zero exit on index failure, got 0"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Verbatim error strings must appear in stderr output.
+  [[ "$output" == *"atlas-aci container index failed — aborting before MCP config writes."* ]] || {
+    echo "Missing verbatim error string 1 in output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"No MCP config files were modified."* ]] || {
+    echo "Missing verbatim error string 2 in output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Config files must be byte-identical to pre-install state (i.e., absent = still absent).
+  local mcp_after codex_after agents_after
+  mcp_after="$(cat ".mcp.json" 2>/dev/null || printf 'ABSENT')"
+  codex_after="$(cat ".codex/config.toml" 2>/dev/null || printf 'ABSENT')"
+  agents_after="$(cat "AGENTS.md" 2>/dev/null || printf 'ABSENT')"
+
+  [ "$mcp_after" = "$mcp_before" ] || {
+    echo ".mcp.json was modified despite index failure"
+    echo "before: $mcp_before"
+    echo "after:  $mcp_after"
+    return 1
+  }
+  [ "$codex_after" = "$codex_before" ] || {
+    echo ".codex/config.toml was modified despite index failure"
+    return 1
+  }
+  [ "$agents_after" = "$agents_before" ] || {
+    echo "AGENTS.md was modified despite index failure"
+    return 1
+  }
 }
