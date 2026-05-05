@@ -424,6 +424,36 @@ image_tag() { printf "%s:%s" "$ATLAS_ACI_IMAGE_REF" "$ATLAS_VERSION"; }
 # ATLAS_ACI_IMAGE_DIGEST.
 image_full_ref() { printf "%s@%s" "$ATLAS_ACI_IMAGE_REF" "$ATLAS_ACI_IMAGE_DIGEST"; }
 
+# _atlas_aci_selinux_enforcing — returns 0 on Linux+SELinux Enforcing; 1 otherwise.
+# Bash 3.2 safe; no associative arrays, no ${var,,}, no readarray.
+_atlas_aci_selinux_enforcing() {
+  case "$(uname -s)" in
+    Linux) ;;
+    *) return 1 ;;
+  esac
+  command -v getenforce >/dev/null 2>&1 || return 1
+  [ "$(getenforce 2>/dev/null)" = "Enforcing" ]
+}
+
+# _atlas_aci_volume_opts BASE — composes the volume option string.
+# BASE is "ro" or empty. Returns ":ro,Z" / ":Z" / ":ro" / "" depending on
+# SELinux state. Mount syntax: "host:container[:opts]" with comma-separated
+# opts. ':Z' relabels the bind with a private MCS so the container can
+# read/write under SELinux Enforcing.
+_atlas_aci_volume_opts() {
+  local base="$1" z=""
+  if _atlas_aci_selinux_enforcing; then z="Z"; fi
+  if [ -n "$base" ] && [ -n "$z" ]; then
+    printf ":%s,%s" "$base" "$z"
+  elif [ -n "$base" ]; then
+    printf ":%s" "$base"
+  elif [ -n "$z" ]; then
+    printf ":%s" "$z"
+  else
+    printf ""
+  fi
+}
+
 # _resolve_pinned_image_ref — echoes the fully-qualified image ref to use
 # for the current install. Resolution order (D3 from atlas-aci-mcp-install-fix):
 #   1. Parse <cwd>/.mcp.json for a ghcr.io/rynaro/atlas-aci@sha256:... arg
@@ -559,19 +589,35 @@ container_json_fragment() {
   # dereferences the literal string and fails. Absolute paths are
   # unambiguous across hosts; the trade-off is per-machine .mcp.json
   # bodies (re-run `eidolons atlas aci install` after relocating).
+  # -u UID:GID baked at install time so the serve container writes
+  # .atlas/ files with host user ownership (atlas-aci-container-uid-perm-fix).
+  # :Z appended to binds when SELinux Enforcing (private MCS relabel).
   local rt="$1" digest="$2"
   local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
-  jq -n --arg rt "$rt" --arg image_ref "$image_ref" --arg ws "$PWD" '{
+  local _uid _gid _repo_mount _memex_mount
+  _uid="$(id -u)"
+  _gid="$(id -g)"
+  _repo_mount="${PWD}:/repo$(_atlas_aci_volume_opts "ro")"
+  _memex_mount="${PWD}/.atlas/memex:/memex$(_atlas_aci_volume_opts "")"
+  jq -n \
+    --arg rt "$rt" \
+    --arg image_ref "$image_ref" \
+    --arg uid_gid "${_uid}:${_gid}" \
+    --arg repo_mount "$_repo_mount" \
+    --arg memex_mount "$_memex_mount" \
+    '{
     command: $rt,
     args: [
       "run",
       "--rm",
       "-i",
       "--read-only",
+      "-u",
+      $uid_gid,
       "-v",
-      ($ws + ":/repo:ro"),
+      $repo_mount,
       "-v",
-      ($ws + "/.atlas/memex:/memex"),
+      $memex_mount,
       "--cap-drop",
       "ALL",
       "--security-opt",
@@ -744,19 +790,55 @@ run_index_container() {
   # BEFORE any MCP config file is written (A13 / D6). The verbatim strings
   # "atlas-aci container index failed — aborting before MCP config writes." and
   # "No MCP config files were modified." are pinned by tests.
-  if ! "$RUNTIME" run --rm \
-         -u "$(id -u):$(id -g)" \
-         -v "${PWD}:/repo" \
-         -v "${PWD}/.atlas/memex:/memex" \
-         --cap-drop ALL \
-         --security-opt no-new-privileges \
-         "$_index_image_ref" \
-         index \
-         --repo /repo \
-         --langs ruby,python,javascript,typescript >&2; then
+  #
+  # :Z appended when SELinux Enforcing (private MCS relabel for bind mounts —
+  # atlas-aci-container-uid-perm-fix-2026-05-05 P-B).
+  local _opts_repo _opts_memex
+  _opts_repo="$(_atlas_aci_volume_opts "")"
+  _opts_memex="$(_atlas_aci_volume_opts "")"
+
+  local _stderr_log
+  _stderr_log="$(mktemp "./.atlas-aci-index-XXXXXX")" || die "mktemp failed"
+
+  # Capture stdout+stderr to a tempfile so we can (a) stream it to the user
+  # and (b) scan it for silent-success indicators after the run. We cannot
+  # use a `cmd | tee file` pipeline under set -euo pipefail because
+  # PIPESTATUS is clobbered by the `|| true` needed to suppress early exit.
+  # Pattern `cmd && rc=0 || rc=$?` is bash 3.2 safe and preserves exit code
+  # without triggering set -e (the whole expression evaluates to 0).
+  local _rc
+  "$RUNTIME" run --rm \
+       -u "$(id -u):$(id -g)" \
+       -v "${PWD}:/repo${_opts_repo}" \
+       -v "${PWD}/.atlas/memex:/memex${_opts_memex}" \
+       --cap-drop ALL \
+       --security-opt no-new-privileges \
+       "$_index_image_ref" \
+       index \
+       --repo /repo \
+       --langs ruby,python,javascript,typescript \
+       >"$_stderr_log" 2>&1 && _rc=0 || _rc=$?
+  cat "$_stderr_log" >&2
+
+  if [ "$_rc" -ne 0 ]; then
+    rm -f "$_stderr_log"
     exit_index_fail "atlas-aci container index failed — aborting before MCP config writes.
   No MCP config files were modified."
   fi
+
+  # INVARIANT (atlas-aci-container-uid-perm-fix-2026-05-05 P-B): green checkmark
+  # requires files_indexed > 0 OR (files_indexed == 0 AND no parse_failed). A
+  # silent green on UID/SELinux failures broke real users (Fedora rootful,
+  # 2026-05-05). Do NOT remove without consulting the spec.
+  if grep -q 'files_indexed=0' "$_stderr_log" 2>/dev/null && \
+     grep -q 'parse_failed' "$_stderr_log" 2>/dev/null; then
+    rm -f "$_stderr_log"
+    exit_index_fail "atlas-aci indexed 0 files but emitted parse_failed warnings — likely UID/SELinux bind-mount mismatch.
+  Diagnostic: ${RUNTIME} run --rm -v \"$PWD:/repo\" -u \"$(id -u):$(id -g)\" ${_index_image_ref} sh -c 'id; ls /repo | head'
+  No MCP config files were modified."
+  fi
+
+  rm -f "$_stderr_log"
   ok "Indexed → .atlas/"
 }
 

@@ -9,7 +9,53 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **SELinux `:Z` mount-relabel for `/repo` and `/memex` binds
+  (spec `atlas-aci-container-uid-perm-fix-2026-05-05`):**
+  When running on a Linux host with SELinux Enforcing, `_atlas_aci_volume_opts`
+  now appends `:Z` to bind-mount option strings. This relabels the bind with a
+  private MCS label so the container process can read/write the mounted paths
+  without a `Permission denied (os error 13)` from the kernel. The `:Z` suffix
+  is threaded through both the index leg (`run_index_container`) and the
+  canonical serve body written to `.mcp.json` by `container_json_fragment`.
+  Composed via two new helpers: `_atlas_aci_selinux_enforcing` (returns 0 on
+  Linux+SELinux Enforcing) and `_atlas_aci_volume_opts` (builds the
+  comma-separated opts string). Both are Bash 3.2 safe.
+
+- **Silent-success guard in `run_index_container`
+  (spec `atlas-aci-container-uid-perm-fix-2026-05-05` P-B):**
+  When the container exits 0 but its output contains both `files_indexed=0`
+  and a `parse_failed` warning line, the wrapper now calls `exit_index_fail`
+  instead of printing a green checkmark. This distinguishes UID/SELinux
+  bind-mount failures (every file emits `IO error: Permission denied`) from
+  legitimate empty-language repos (which also emit `files_indexed=0` but
+  produce no `parse_failed` lines). The error message includes a diagnostic
+  one-liner so the user can confirm the root cause.
+
+- **Five new bats cases in `tests/aci.bats`
+  (spec `atlas-aci-container-uid-perm-fix-2026-05-05`):**
+  - G2-T1.silent-success-fires: container exits 0 with `parse_failed` +
+    `files_indexed=0` → `exit_index_fail`, no MCP writes.
+  - G3-T1.empty-lang-no-false-fail: `files_indexed=0` with no `parse_failed`
+    → success, `.mcp.json` written.
+  - G-T1.selinux-suffix-when-enforcing: stubbed `getenforce=Enforcing` →
+    docker.log contains `:Z` (Linux only, skipped on macOS).
+  - G-T1.selinux-no-suffix-when-permissive: stubbed `getenforce=Permissive`
+    → docker.log does NOT contain `:Z` (Linux only, skipped on macOS).
+  - G-T1.canonical-body-includes-u-flag: `.mcp.json` args array contains
+    `-u <uid>:<gid>` baked at install time.
+
 ### Fixed
+
+- **Fedora SELinux Enforcing hosts: silent `files_indexed=0` with
+  `Permission denied` on every source file
+  (spec `atlas-aci-container-uid-perm-fix-2026-05-05`):**
+  The wrapper previously printed `✓ Indexed → .atlas/` even when the container
+  indexed 0 files because every bind-mount path was denied by SELinux. The
+  silent-success guard (see Added above) and the `:Z` relabel (see Added above)
+  together prevent this: the guard fails loudly if the user has not yet added
+  `:Z`; after re-running with the fix, `:Z` is baked and the index succeeds.
 
 - **`commands/aci.sh` container index: pre-create `.atlas/memex/` + add `-u UID:GID`
   (P-A fix, spec atlas-aci-mcp-install-fix-2026-05-04 T4 / S2):**
