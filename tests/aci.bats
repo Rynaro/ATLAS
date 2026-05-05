@@ -88,6 +88,19 @@ case "\$1" in
         printf 'simulated index error\n' >&2
         exit 1
       fi
+      # simulate_perm_denied: container exits 0 but emits parse_failed + files_indexed=0
+      # (SELinux/UID bind-mount mismatch — silent failure path, G2 test).
+      if [ -f "${sentinel}.simulate_perm_denied" ]; then
+        printf '2026-05-05T20:23:52.947160Z [warning  ] parse_failed                   error='"'"'IO error: Permission denied (os error 13)'"'"' path=/repo/x.ts\n' >&2
+        printf '2026-05-05T20:23:59.370231Z [info     ] index_done                     files_indexed=0 refs=0 symbols=0\n' >&2
+        exit 0
+      fi
+      # simulate_empty_lang: container exits 0 with files_indexed=0 but NO parse_failed
+      # (docs-only or unsupported-language repo — must NOT trigger the silent-success guard).
+      if [ -f "${sentinel}.simulate_empty_lang" ]; then
+        printf '2026-05-05T20:23:59.370231Z [info     ] index_done                     files_indexed=0 refs=0 symbols=0\n' >&2
+        exit 0
+      fi
       mkdir -p ./.atlas
       printf 'generated: true\n' > ./.atlas/manifest.yaml
     fi
@@ -137,6 +150,18 @@ install_docker_stub_digest_only() {
 # Used by the "index failure: no MCP config files written" test.
 set_docker_index_run_fail() {
   touch "$BATS_TEST_TMPDIR/docker.sentinel.run_fail"
+}
+
+# set_docker_index_perm_denied — docker run with 'index' exits 0 but emits
+# parse_failed + files_indexed=0 (SELinux/UID silent failure, G2 test).
+set_docker_index_perm_denied() {
+  touch "$BATS_TEST_TMPDIR/docker.sentinel.simulate_perm_denied"
+}
+
+# set_docker_index_empty_lang — docker run with 'index' exits 0 with
+# files_indexed=0 and NO parse_failed (docs-only repo, G3 test).
+set_docker_index_empty_lang() {
+  touch "$BATS_TEST_TMPDIR/docker.sentinel.simulate_empty_lang"
 }
 
 # docker_build_count — number of times `docker build` was invoked.
@@ -265,13 +290,15 @@ EOF
 
   # Both -v mounts must reference the absolute project root (cwd at
   # install time = $PWD = the test project dir).
-  run jq -r '.mcpServers["atlas-aci"].args[5]' .mcp.json
+  # NOTE: -u <uid>:<gid> is now inserted after --read-only, so the first
+  # -v mount is at index 7 (not 5) in the args array.
+  run jq -r '.mcpServers["atlas-aci"].args[7]' .mcp.json
   [ "$output" = "${PWD}:/repo:ro" ] || {
     echo "Expected first -v mount = '${PWD}:/repo:ro', got: $output"
     cat .mcp.json
     return 1
   }
-  run jq -r '.mcpServers["atlas-aci"].args[7]' .mcp.json
+  run jq -r '.mcpServers["atlas-aci"].args[9]' .mcp.json
   [ "$output" = "${PWD}/.atlas/memex:/memex" ] || {
     echo "Expected second -v mount = '${PWD}/.atlas/memex:/memex', got: $output"
     cat .mcp.json
@@ -1486,6 +1513,199 @@ EOF
   }
   [ "$agents_after" = "$agents_before" ] || {
     echo "AGENTS.md was modified despite index failure"
+    return 1
+  }
+}
+
+# ─── T1 tests (atlas-aci-container-uid-perm-fix-2026-05-05) ──────────────
+# G2: silent-success guard — files_indexed=0 + parse_failed → fail loudly.
+# G3: empty-lang repo (files_indexed=0, no parse_failed) → success, MCP written.
+# G-T1.selinux-suffix-when-enforcing: :Z appended when SELinux Enforcing.
+# G-T1.canonical-body-includes-u-flag: .mcp.json args contains -u <uid>:<gid>.
+
+@test "G2-T1.silent-success-fires: files_indexed=0 + parse_failed triggers exit_index_fail, no MCP writes" {
+  setup_fresh_project
+  setup_container_stubs
+  set_docker_index_perm_denied
+  seed_claude_host
+
+  # Capture pre-install state of config files that must NOT be created.
+  local mcp_before codex_before agents_before
+  mcp_before="$(cat ".mcp.json" 2>/dev/null || printf 'ABSENT')"
+  codex_before="$(cat ".codex/config.toml" 2>/dev/null || printf 'ABSENT')"
+  agents_before="$(cat "AGENTS.md" 2>/dev/null || printf 'ABSENT')"
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -ne 0 ] || {
+    echo "Expected non-zero exit on silent-success (perm denied) path, got 0"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Verbatim error strings must appear in stderr output.
+  [[ "$output" == *"atlas-aci indexed 0 files but emitted parse_failed warnings"* ]] || {
+    echo "Missing verbatim silent-success error string in output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"No MCP config files were modified."* ]] || {
+    echo "Missing 'No MCP config files were modified.' in output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Config files must be byte-identical to pre-install state.
+  local mcp_after codex_after agents_after
+  mcp_after="$(cat ".mcp.json" 2>/dev/null || printf 'ABSENT')"
+  codex_after="$(cat ".codex/config.toml" 2>/dev/null || printf 'ABSENT')"
+  agents_after="$(cat "AGENTS.md" 2>/dev/null || printf 'ABSENT')"
+
+  [ "$mcp_after" = "$mcp_before" ] || {
+    echo ".mcp.json was modified despite silent-success guard"
+    echo "before: $mcp_before"
+    echo "after:  $mcp_after"
+    return 1
+  }
+  [ "$codex_after" = "$codex_before" ] || {
+    echo ".codex/config.toml was modified despite silent-success guard"
+    return 1
+  }
+  [ "$agents_after" = "$agents_before" ] || {
+    echo "AGENTS.md was modified despite silent-success guard"
+    return 1
+  }
+}
+
+@test "G3-T1.empty-lang-no-false-fail: files_indexed=0 without parse_failed succeeds and writes MCP config" {
+  setup_fresh_project
+  setup_container_stubs
+  set_docker_index_empty_lang
+  seed_claude_host
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0 for empty-lang repo (no parse_failed), got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # Output must contain the success message.
+  [[ "$output" == *"Indexed → .atlas/"* ]] || {
+    echo "Expected 'Indexed → .atlas/' in output:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # .mcp.json must have been written.
+  [ -f ".mcp.json" ] || {
+    echo ".mcp.json was not written for empty-lang repo"
+    return 1
+  }
+  assert_mcp_json_contains ".mcp.json" "atlas-aci"
+}
+
+@test "G-T1.selinux-suffix-when-enforcing: :Z appended to volume mounts when SELinux Enforcing (Linux only)" {
+  # Skip on non-Linux — SELinux is a Linux kernel feature.
+  if [ "$(uname -s)" != "Linux" ]; then
+    skip "SELinux test only runs on Linux"
+  fi
+
+  setup_fresh_project
+  seed_claude_host
+
+  # Stub getenforce to return "Enforcing".
+  install_stub "getenforce" 0 'printf "Enforcing\n"'
+  # Stub uname to report Linux (it already is, but be explicit in PATH).
+  install_stub "git" 0
+  install_docker_stub
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0 with getenforce=Enforcing, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # docker.log must contain :Z in the volume mount arguments for the index run.
+  grep -q ':Z' "$BATS_TEST_TMPDIR/docker.log" || {
+    echo "Expected :Z in docker.log volume mounts (SELinux Enforcing path):"
+    cat "$BATS_TEST_TMPDIR/docker.log"
+    return 1
+  }
+}
+
+@test "G-T1.selinux-no-suffix-when-permissive: no :Z when getenforce returns Permissive (Linux only)" {
+  if [ "$(uname -s)" != "Linux" ]; then
+    skip "SELinux test only runs on Linux"
+  fi
+
+  setup_fresh_project
+  seed_claude_host
+
+  # Stub getenforce to return "Permissive".
+  install_stub "getenforce" 0 'printf "Permissive\n"'
+  install_stub "git" 0
+  install_docker_stub
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0 with getenforce=Permissive, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  # docker.log must NOT contain :Z for volume mounts.
+  if grep -q ':Z' "$BATS_TEST_TMPDIR/docker.log" 2>/dev/null; then
+    echo "Unexpected :Z in docker.log (getenforce=Permissive should not add :Z):"
+    cat "$BATS_TEST_TMPDIR/docker.log"
+    return 1
+  fi
+}
+
+@test "G-T1.canonical-body-includes-u-flag: .mcp.json args contains -u <uid>:<gid>" {
+  setup_fresh_project
+  setup_container_stubs
+  seed_claude_host
+
+  run_aci --install --container --runtime docker --non-interactive
+  [ "$status" -eq 0 ] || {
+    echo "Expected exit 0, got $status:"
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  [ -f ".mcp.json" ] || {
+    echo ".mcp.json not created"
+    return 1
+  }
+
+  local expected_uid_gid
+  expected_uid_gid="$(id -u):$(id -g)"
+
+  # .mcp.json args array must contain "-u" followed by "<uid>:<gid>".
+  local has_u_flag
+  has_u_flag="$(jq -r '
+    .mcpServers["atlas-aci"].args
+    | to_entries[]
+    | select(.value == "-u")
+    | .key
+  ' ".mcp.json" 2>/dev/null)"
+
+  [ -n "$has_u_flag" ] || {
+    echo "Expected -u flag in .mcp.json args:"
+    jq '.mcpServers["atlas-aci"].args' ".mcp.json"
+    return 1
+  }
+
+  # The element immediately after -u must be "<uid>:<gid>".
+  local u_val
+  u_val="$(jq -r --arg idx "$has_u_flag" '
+    .mcpServers["atlas-aci"].args[($idx | tonumber) + 1]
+  ' ".mcp.json" 2>/dev/null)"
+
+  [ "$u_val" = "$expected_uid_gid" ] || {
+    echo "Expected -u value '$expected_uid_gid', got '$u_val'"
+    jq '.mcpServers["atlas-aci"].args' ".mcp.json"
     return 1
   }
 }
