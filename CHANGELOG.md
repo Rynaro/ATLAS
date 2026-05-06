@@ -7,46 +7,24 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
-
-### Added
-
-- **SELinux `:Z` mount-relabel for `/repo` and `/memex` binds
-  (spec `atlas-aci-container-uid-perm-fix-2026-05-05`):**
-  When running on a Linux host with SELinux Enforcing, `_atlas_aci_volume_opts`
-  now appends `:Z` to bind-mount option strings. This relabels the bind with a
-  private MCS label so the container process can read/write the mounted paths
-  without a `Permission denied (os error 13)` from the kernel. The `:Z` suffix
-  is threaded through both the index leg (`run_index_container`) and the
-  canonical serve body written to `.mcp.json` by `container_json_fragment`.
-  Composed via two new helpers: `_atlas_aci_selinux_enforcing` (returns 0 on
-  Linux+SELinux Enforcing) and `_atlas_aci_volume_opts` (builds the
-  comma-separated opts string). Both are Bash 3.2 safe.
-
-- **Silent-success guard in `run_index_container`
-  (spec `atlas-aci-container-uid-perm-fix-2026-05-05` P-B):**
-  When the container exits 0 but its output contains both `files_indexed=0`
-  and a `parse_failed` warning line, the wrapper now calls `exit_index_fail`
-  instead of printing a green checkmark. This distinguishes UID/SELinux
-  bind-mount failures (every file emits `IO error: Permission denied`) from
-  legitimate empty-language repos (which also emit `files_indexed=0` but
-  produce no `parse_failed` lines). The error message includes a diagnostic
-  one-liner so the user can confirm the root cause.
-
-- **Five new bats cases in `tests/aci.bats`
-  (spec `atlas-aci-container-uid-perm-fix-2026-05-05`):**
-  - G2-T1.silent-success-fires: container exits 0 with `parse_failed` +
-    `files_indexed=0` → `exit_index_fail`, no MCP writes.
-  - G3-T1.empty-lang-no-false-fail: `files_indexed=0` with no `parse_failed`
-    → success, `.mcp.json` written.
-  - G-T1.selinux-suffix-when-enforcing: stubbed `getenforce=Enforcing` →
-    docker.log contains `:Z` (Linux only, skipped on macOS).
-  - G-T1.selinux-no-suffix-when-permissive: stubbed `getenforce=Permissive`
-    → docker.log does NOT contain `:Z` (Linux only, skipped on macOS).
-  - G-T1.canonical-body-includes-u-flag: `.mcp.json` args array contains
-    `-u <uid>:<gid>` baked at install time.
+## [1.4.2] - 2026-05-06 — Defensive `-e HOME=/tmp` + SELinux `:Z` + silent-success guard
 
 ### Fixed
+
+- **`commands/aci.sh`: emit `-e HOME=/tmp` in docker invocations to defend
+  against atlas-aci images whose baked `$HOME` (`/home/atlas` mode `0700`) is
+  unreadable when `-u` is overridden to host UID:**
+  `tree_sitter_language_pack` performs `$HOME`-relative I/O during
+  `parser.parse()`. The atlas-aci image bakes `USER atlas:10001` with
+  `/home/atlas` mode `0700`; when eidolons CLI overrides `-u` to the host UID,
+  the process cannot read `$HOME` → EACCES → every source file `parse_failed`.
+  Adding `-e HOME=/tmp` to all four emitter paths (`run_index_container`,
+  `container_json_fragment`, `_copilot_command_array`, and
+  `_codex_canonical_body_container`) plus the index-time `docker run` makes
+  `$HOME` point at a world-readable, tmpfs-friendly path regardless of which UID
+  runs the container. Belt-and-braces: Layer 1 (atlas-aci `ENV HOME=/tmp`) is the
+  primary fix; this Layer 2 emitter change protects consumers who manually pinned
+  an older `@sha256:` digest or set `ATLAS_ACI_IMAGE_REF` to an older tag.
 
 - **Fedora SELinux Enforcing hosts: silent `files_indexed=0` with
   `Permission denied` on every source file
@@ -78,12 +56,39 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
-- **`commands/aci.sh` header invariant comment:** Documents the fail-closed write
-  boundary ("No MCP config files were modified.") as a pinned invariant.
-- **`_resolve_pinned_image_ref` function in `commands/aci.sh`:** Resolves the
-  image ref to check from `.mcp.json`, optional nexus CLI, or constant fallback
-  (Bash 3.2 safe).
-- **Three new bats cases in `tests/aci.bats`:**
+- **SELinux `:Z` mount-relabel for `/repo` and `/memex` binds
+  (spec `atlas-aci-container-uid-perm-fix-2026-05-05`):**
+  When running on a Linux host with SELinux Enforcing, `_atlas_aci_volume_opts`
+  now appends `:Z` to bind-mount option strings. This relabels the bind with a
+  private MCS label so the container process can read/write the mounted paths
+  without a `Permission denied (os error 13)` from the kernel. The `:Z` suffix
+  is threaded through both the index leg (`run_index_container`) and the
+  canonical serve body written to `.mcp.json` by `container_json_fragment`.
+  Composed via two new helpers: `_atlas_aci_selinux_enforcing` (returns 0 on
+  Linux+SELinux Enforcing) and `_atlas_aci_volume_opts` (builds the
+  comma-separated opts string). Both are Bash 3.2 safe.
+
+- **Silent-success guard in `run_index_container`
+  (spec `atlas-aci-container-uid-perm-fix-2026-05-05` P-B):**
+  When the container exits 0 but its output contains both `files_indexed=0`
+  and a `parse_failed` warning line, the wrapper now calls `exit_index_fail`
+  instead of printing a green checkmark. This distinguishes UID/SELinux
+  bind-mount failures (every file emits `IO error: Permission denied`) from
+  legitimate empty-language repos (which also emit `files_indexed=0` but
+  produce no `parse_failed` lines). The error message includes a diagnostic
+  one-liner so the user can confirm the root cause.
+
+- **Eight new bats cases in `tests/aci.bats`:**
+  - G2-T1.silent-success-fires: container exits 0 with `parse_failed` +
+    `files_indexed=0` → `exit_index_fail`, no MCP writes.
+  - G3-T1.empty-lang-no-false-fail: `files_indexed=0` with no `parse_failed`
+    → success, `.mcp.json` written.
+  - G-T1.selinux-suffix-when-enforcing: stubbed `getenforce=Enforcing` →
+    docker.log contains `:Z` (Linux only, skipped on macOS).
+  - G-T1.selinux-no-suffix-when-permissive: stubbed `getenforce=Permissive`
+    → docker.log does NOT contain `:Z` (Linux only, skipped on macOS).
+  - G-T1.canonical-body-includes-u-flag: `.mcp.json` args array contains
+    `-u <uid>:<gid>` baked at install time.
   - T4-1: fresh project — `.atlas/memex/` created before docker run; docker run
     contains `-u` and a writable `/memex` bind.
   - T4-2: image already loaded (inspect-only sentinel) — `docker build` not
@@ -91,8 +96,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   - T4-3: index failure — no MCP config files written; verbatim error strings;
     non-zero exit.
 
-### Added (earlier, preserved from prior Unreleased section)
-
+- **`commands/aci.sh` header invariant comment:** Documents the fail-closed write
+  boundary ("No MCP config files were modified.") as a pinned invariant.
+- **`_resolve_pinned_image_ref` function in `commands/aci.sh`:** Resolves the
+  image ref to check from `.mcp.json`, optional nexus CLI, or constant fallback
+  (Bash 3.2 safe).
 - **`.github/workflows/release.yml`** — adopts the eidolons-nexus
   release-integrity contract by wrapping the reusable
   `Rynaro/eidolons/.github/workflows/eidolon-release-template.yml`
@@ -102,6 +110,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   `commit`, `tree`, `archive_sha256`, optional `manifest_sha256`, and
   `provenance.github_attestation: true`) so the nexus `roster-intake.yml`
   workflow can populate `versions.releases.<v>` for ATLAS.
+
+### Changed
+
+- **`tests/aci.bats` ABS-1 — rewrite to index-agnostic `-v` mount assertions:**
+  The test previously pinned the first and second `-v` mount values by integer
+  index (`args[7]`, `args[9]`). Rewritten to use `jq indices("-v")` lookup
+  matching the H3 test convention, so future arg insertions do not require
+  updating numeric positions.
+
+- **`ATLAS_VERSION` / `EIDOLON_VERSION` bumped `1.3.0 → 1.4.2`.**
 
 ---
 
