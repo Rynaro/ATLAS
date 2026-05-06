@@ -59,7 +59,7 @@ case "\$1" in
     fi
     # Repository:Tag format query (image_exists uses this path).
     if [ -f "${sentinel}" ]; then
-      printf 'ghcr.io/rynaro/atlas-aci:1.3.0\n'
+      printf 'ghcr.io/rynaro/atlas-aci:1.4.2\n'
     fi
     exit 0
     ;;
@@ -290,15 +290,17 @@ EOF
 
   # Both -v mounts must reference the absolute project root (cwd at
   # install time = $PWD = the test project dir).
-  # NOTE: -u <uid>:<gid> is now inserted after --read-only, so the first
-  # -v mount is at index 7 (not 5) in the args array.
-  run jq -r '.mcpServers["atlas-aci"].args[7]' .mcp.json
+  # Use index-agnostic lookup (matching H3 convention) so future arg
+  # insertions don't require updating integer positions here.
+  # indices("-v") finds every position of the "-v" flag; adding 1 gives
+  # the corresponding mount value position.
+  run jq -r '.mcpServers["atlas-aci"].args as $a | $a | indices("-v")[0] + 1 | $a[.]' .mcp.json
   [ "$output" = "${PWD}:/repo:ro" ] || {
     echo "Expected first -v mount = '${PWD}:/repo:ro', got: $output"
     cat .mcp.json
     return 1
   }
-  run jq -r '.mcpServers["atlas-aci"].args[9]' .mcp.json
+  run jq -r '.mcpServers["atlas-aci"].args as $a | $a | indices("-v")[1] + 1 | $a[.]' .mcp.json
   [ "$output" = "${PWD}/.atlas/memex:/memex" ] || {
     echo "Expected second -v mount = '${PWD}/.atlas/memex:/memex', got: $output"
     cat .mcp.json
@@ -827,7 +829,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker, ghcr.io/rynaro/atlas-aci:1.3.0)"* ]] || {
+  [[ "$output" == *"Mode: container (docker, ghcr.io/rynaro/atlas-aci:1.4.2)"* ]] || {
     echo "Expected container-mode banner:"
     printf '%s\n' "$output"
     return 1

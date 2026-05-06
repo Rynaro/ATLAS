@@ -67,7 +67,7 @@ ATLAS_ACI_IMAGE_DIGEST="sha256:386677f06b0ce23cb4883f6c0f91d8eac22328cd7d9451ae2
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
 # Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.3.0"
+ATLAS_VERSION="1.4.2"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -614,6 +614,8 @@ container_json_fragment() {
       "--read-only",
       "-u",
       $uid_gid,
+      "-e",
+      "HOME=/tmp",
       "-v",
       $repo_mount,
       "-v",
@@ -809,6 +811,7 @@ run_index_container() {
   local _rc
   "$RUNTIME" run --rm \
        -u "$(id -u):$(id -g)" \
+       -e HOME=/tmp \
        -v "${PWD}:/repo${_opts_repo}" \
        -v "${PWD}/.atlas/memex:/memex${_opts_memex}" \
        --cap-drop ALL \
@@ -1100,6 +1103,7 @@ _copilot_command_array() {
     local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
     jq -n --arg rt "$rt" --arg image_ref "$image_ref" --arg ws "$PWD" \
       '[$rt, "run", "--rm", "-i", "--read-only",
+        "-e", "HOME=/tmp",
         "-v", ($ws + ":/repo:ro"),
         "-v", ($ws + "/.atlas/memex:/memex"),
         "--cap-drop", "ALL",
@@ -1275,7 +1279,7 @@ _codex_canonical_body_container() {
   local rt="$1" digest="$2"
   local image_ref="${ATLAS_ACI_IMAGE_REF}@${digest}"
   printf 'command = "%s"\n' "$rt"
-  printf 'args = ["run", "--rm", "-i", "--read-only", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$image_ref"
+  printf 'args = ["run", "--rm", "-i", "--read-only", "-e", "HOME=/tmp", "-v", "%s:/repo:ro", "-v", "%s/.atlas/memex:/memex", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "%s", "serve", "--repo", "/repo", "--memex-root", "/memex"]\n' "$PWD" "$PWD" "$image_ref"
 }
 
 # _codex_canonical_body_container_legacy RUNTIME DIGEST — the OLD bare-ref
