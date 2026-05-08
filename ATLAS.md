@@ -37,6 +37,7 @@ requests. They survive model swaps.
 | I-6 | Telemetry-driven compaction | Harness tracks `context_used_pct`. At ≥60% it triggers an asynchronous fold. At ≥85% it halts and forces a checkpoint. |
 | I-7 | Evidence-anchored claims | Every claim in the scout report carries `path:line_start-line_end` + confidence tier (`H`/`M`/`L`). Unanchored claims fail validation. |
 | I-8 | Stop conditions are explicit | Decision-quality target is declared in the mission brief. ATLAS halts when target is reached; it does not keep exploring. |
+| I-9 | ECL-conformant handoffs | Phase S MUST emit a v1.0 envelope sidecar (`scout-report.envelope.json`) adjacent to the scout-report. Envelope MUST satisfy the ECL v1.0 envelope schema (`schemas/ecl-envelope.v1.json`) and the per-Eidolon scout-report profile (`schemas/scout-report-profile.v1.json`). Envelope is a terminal Phase-S artefact (same class as `scout-report.md`) — NOT a tool — preserving the I-1 read-only invariant. |
 
 **Why mechanical?** Model-level instructions alone are insufficient under
 long-horizon context rot. The SWE-agent, Claude Code Plan Mode, and AgentFold
@@ -211,7 +212,14 @@ consume.
 
 **Inputs.** Folded summary + `mission.md`.
 
-**Outputs.** `scout-report.md` (see `templates/scout-report.md`). Sections:
+**Outputs.**
+
+- `scout-report.md` (see `templates/scout-report.md`) — primary structured report.
+- `scout-report.envelope.json` (see `templates/scout-report.envelope.json`) — ECL v1.0 envelope sidecar, emitted adjacent to the scout report. Schema: `schemas/ecl-envelope.v1.json` + `schemas/scout-report-profile.v1.json`.
+
+The envelope sidecar is a **terminal Phase-S artefact** in the same class as `scout-report.md` itself. It is NOT a tool call. Emitting it does not violate the I-1 read-only invariant.
+
+`scout-report.md` sections:
 
 1. **Mission recap** (copied verbatim from `mission.md`).
 2. **Topology summary** (≤10 bullets derived from `map.md`).
@@ -227,8 +235,12 @@ consume.
 - Every factual statement maps back to a `FINDING-XXX`. Synthesis does not
   introduce new claims.
 - No section exceeds 500 tokens. If it does, the mission should have been split.
+- The envelope sidecar is a terminal artefact emission, not a tool. It is
+  produced as a Phase-S output in the same way `scout-report.md` is produced.
+  This classification is explicit so the I-1 read-only invariant is not
+  misread as prohibiting envelope emission.
 
-**Exit criteria.** Schema-validated scout report + all `DECISION_TARGET`
+**Exit criteria.** Schema-validated scout report + schema-validated envelope sidecar + all `DECISION_TARGET`
 sub-questions answered or explicitly marked unanswerable.
 
 ---
@@ -303,6 +315,8 @@ and a migration note.
 
 Downstream implementations SHOULD declare ATLAS version compatibility in
 their `agent.md` frontmatter.
+
+ATLAS targets ECL v1.0 (declared in `ECL_VERSION`). v1.0 is opt-in; live consumers MAY ignore the envelope sidecar without losing scout-report functionality.
 
 ## 8. atlas-aci MCP server — container mode (v1.1.0)
 

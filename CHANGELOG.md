@@ -7,6 +7,105 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.5.0] - 2026-05-08 — ECL v1.0 emission adoption
+
+### Added
+
+- **`ECL_VERSION`** — new repo-root file declaring `1.0`, the targeted ECL
+  (Eidolons Communication Layer) spec version. Mirrors the shape of
+  `EIIS_VERSION`. Presence of this file enables the optional
+  `ecl_version_emitted` field in the install manifest.
+
+- **`schemas/ecl-envelope.v1.json`** — vendored copy of the central ECL v1.0
+  envelope schema (`eidolons-ecl/schemas/envelope.v1.json`) for self-contained
+  ATLAS validation. ATLAS install copies this to the consumer's
+  `.eidolons/atlas/schemas/` directory.
+
+- **`schemas/scout-report-profile.v1.json`** — vendored copy of the central
+  ECL per-Eidolon scout-report profile
+  (`eidolons-ecl/schemas/per-eidolon/scout-report.v1.json`) for self-contained
+  ATLAS validation. Validates the ECL envelope YAML frontmatter for
+  ATLAS-emitted scout reports; the body structure remains governed by
+  `schemas/scout-report.v1.json`. Includes a schema-level comment explaining
+  the `scope.{entrypoints,modules,excluded}` (envelope frontmatter) vs
+  `mission_recap.scope.{include,exclude}` (body) naming divergence so
+  implementors don't conflate the two layers.
+
+- **`templates/scout-report.envelope.json`** — fill-in-the-blank skeleton for
+  the ECL v1.0 envelope sidecar emitted alongside `scout-report.md` at Phase S.
+  Uses `x_atlas_comment` vendor-extension field (allowed by the central schema's
+  `patternProperties: "^x_[a-z][a-z0-9_]*$"`) to embed guidance without
+  violating `additionalProperties: false`.
+
+- **`schemas/install.manifest.v1.json`** — hand-extended (locally, ahead of
+  EIIS v1.2 GA) to accept an optional `ecl_version_emitted` string field
+  matching the pattern `^[0-9]+\.[0-9]+(\.[0-9]+)?$`. Will be re-vendored from
+  EIIS v1.2 once tagged. Top-level `description` updated to document the
+  hand-extension.
+
+- **`ATLAS.md §1` I-9 architectural invariant** — Phase S MUST emit a v1.0
+  envelope sidecar adjacent to the scout report; envelope is a terminal
+  Phase-S artefact (not a tool — preserves I-1 read-only).
+
+- **`skills/synthesize/SKILL.md` — Envelope sidecar sub-section** — added
+  immediately after the existing `<handoff>` block guidance (which is
+  preserved as-is for one minor cycle per the v1.5 design call). Instructs
+  envelope construction: SHA-256 + `size_bytes` calculation, `from`/`to`/
+  `performative=PROPOSE` fields, and reference to
+  `eidolons-ecl/contracts/atlas-to-spectra.yaml`.
+
+- **`skills/synthesize/SKILL.md` — Exit gate 7th item** — `[ ] Envelope
+  sidecar emitted, schema-valid against schemas/ecl-envelope.v1.json,
+  integrity.sha256 matches payload`.
+
+### Changed
+
+- **`install.sh`** — `EIDOLON_VERSION` bumped `1.4.2` → `1.5.0`. Reads
+  `ECL_VERSION` at install time and conditionally injects
+  `"ecl_version_emitted"` into both the dry-run preview (`MANIFEST_CONTENT`)
+  and the live heredoc write. Field is omitted entirely when `ECL_VERSION` is
+  absent (opt-in, Bash 3.2 compatible). New `copy_file` calls propagate the
+  three new files (`schemas/scout-report-profile.v1.json`,
+  `schemas/ecl-envelope.v1.json`, `templates/scout-report.envelope.json`) to
+  the consumer's install target.
+
+- **`agent.md` frontmatter** — `comm.envelope_version: "1.0"` block added.
+  Signals ECL envelope emission capability to roster and host tooling.
+
+- **`AGENTS.md` frontmatter** — same `comm.envelope_version: "1.0"` block.
+
+- **`ATLAS.md §2.5 Phase S contract`** — Outputs section now lists both
+  `scout-report.md` and `scout-report.envelope.json`; Hard constraints section
+  explicitly classifies the envelope as a terminal artefact emission (not a
+  tool), preserving I-1.
+
+- **`ATLAS.md §7 Versioning`** — one-line ECL compatibility statement added.
+
+- **`templates/scout-report.md §7`** — §7.1 "Envelope sidecar" sub-section
+  added after the `<handoff>` block, pointing to the envelope template and
+  documenting the scope-field naming divergence in a HTML comment.
+
+- **`DESIGN-RATIONALE.md`** — I-9 entry appended (after I-8), following the
+  I-1..I-8 format. Cites ECL §1 (envelope shape) and §3 (per-Eidolon profile).
+
+- **`CLAUDE.md §Schema Validation`** — one-line addendum noting
+  `ecl-envelope.v1.json`.
+
+- **`CLAUDE.md §Versioning Policy`** — one-line ECL adoption statement.
+
+### Notes
+
+- ECL adoption is opt-in. Existing `scout-report.md` consumers continue to
+  work without envelope-aware tooling; the sidecar is additive.
+- The release workflow's `eiis-version` pin stays at `"1.1"` — bumping to
+  `"1.2"` before `Rynaro/eidolons-eiis` PR #1 (EIIS v1.2) is merged and
+  tagged would CI-break.
+- The `<handoff>` XML stub in `skills/synthesize/SKILL.md` and
+  `templates/scout-report.md §7` is intentionally preserved for this minor
+  cycle. It will be removed in v1.6.
+
+---
+
 ## [1.4.2] - 2026-05-06 — Defensive `-e HOME=/tmp` + SELinux `:Z` + silent-success guard
 
 ### Fixed

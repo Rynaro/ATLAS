@@ -110,3 +110,32 @@ fold_ratio:       <float>   # target ≤ 0.1
   </open_questions>
 </handoff>
 ```
+
+## 7.1 Envelope sidecar (ECL v1.0)
+
+Emit a `scout-report.envelope.json` adjacent to this report. Use
+`templates/scout-report.envelope.json` as the skeleton. Fill all
+`<placeholder>` values before emitting. The envelope is a terminal
+Phase-S artefact (not a tool call — see `ATLAS.md §1 I-9` and
+`skills/synthesize/SKILL.md §Envelope sidecar`).
+
+Validate against `schemas/ecl-envelope.v1.json` before marking Phase S
+complete.
+
+<!-- SCOPE FIELD NOTE (for implementors):
+  The envelope frontmatter uses scope.{entrypoints, modules, excluded}
+  (defined in schemas/scout-report-profile.v1.json) to describe the
+  mission scope in ECL terms.
+
+  The scout-report BODY uses mission_recap.scope.{include, exclude}
+  (defined in schemas/scout-report.v1.json) to record the SCOPE_INCLUDE /
+  SCOPE_EXCLUDE path globs from mission.md.
+
+  These are DIFFERENT fields at DIFFERENT layers and do NOT duplicate each
+  other:
+    - Envelope frontmatter scope = ECL routing metadata (entrypoints list,
+      modules touched, dirs excluded from indexing).
+    - Body mission_recap scope = raw glob patterns from the mission brief.
+
+  Do not confuse them when filling the envelope template.
+-->

@@ -166,6 +166,37 @@ After `scout-report.md` is written, emit exactly one handoff block:
 
 Downstream tooling parses this block deterministically.
 
+### Envelope sidecar (ECL v1.0)
+
+Immediately after the `<handoff>` block, also emit a `scout-report.envelope.json`
+file adjacent to the scout report. This is a terminal Phase-S artefact in the
+same class as `scout-report.md` — it is produced by the harness as Phase-S
+output, NOT via a write tool call, preserving the I-1 read-only invariant.
+
+Use `templates/scout-report.envelope.json` as the fill-in-the-blank skeleton.
+Key fields to populate:
+
+- `artifact.path` — relative path to the `scout-report.md` file (e.g.
+  `artifacts/ATLAS/scout-report-MISSION-042.md`).
+- `artifact.sha256` + `integrity.value` — SHA-256 hex digest of the scout-report
+  file bytes. Compute with `shasum -a 256 <file> | awk '{print $1}'` or
+  equivalent. The values MUST match.
+- `artifact.size_bytes` — byte count of the scout-report file
+  (`wc -c < <file> | tr -d '[:space:]'`).
+- `from.version` — ATLAS SemVer at the time of emission (e.g. `"1.5.0"`).
+- `to.eidolon` / `to.version` — primary handoff recipient (usually `"spectra"`).
+  See `ATLAS.md §6` for recipient mapping.
+- `performative` — `"PROPOSE"` for ATLAS→SPECTRA scout handoffs (ECL v1.0 §2).
+- `objective` — one sentence ≤240 chars matching the mission GOAL.
+- `trace.host`, `trace.model`, `trace.ts` — fill from the active session context.
+
+Reference contract: `eidolons-ecl/contracts/atlas-to-spectra.yaml` (in the
+`Rynaro/eidolons-ecl` repo) defines the normative `from`/`to`/`edge_origin`/
+`performative` values for the ATLAS→SPECTRA edge.
+
+Validate the emitted envelope against `schemas/ecl-envelope.v1.json` before
+marking Phase S complete.
+
 ---
 
 ## Exit gate
@@ -176,6 +207,7 @@ Downstream tooling parses this block deterministically.
 - [ ] Every R-N in §4 has a concrete handoff label.
 - [ ] Every GAP-XXX from the fold appears in §5.
 - [ ] Handoff block emitted and well-formed.
+- [ ] Envelope sidecar emitted, schema-valid against `schemas/ecl-envelope.v1.json`, `integrity.sha256` matches payload.
 - [ ] Memex remains intact; downstream agents can dereference anchors.
 
 If exit gate fails, the mission did not complete. Report `STATUS: partial`
