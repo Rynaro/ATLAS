@@ -4,9 +4,17 @@
 set -euo pipefail
 
 EIDOLON_NAME="atlas"
-EIDOLON_VERSION="1.4.2"
+EIDOLON_VERSION="1.5.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ECL_VERSION — read from repo-root ECL_VERSION file if present.
+# The field is omitted from the manifest when the file is absent.
+ECL_VERSION_FILE="${SCRIPT_DIR}/ECL_VERSION"
+ECL_VERSION_EMITTED=""
+if [[ -f "$ECL_VERSION_FILE" ]]; then
+  ECL_VERSION_EMITTED="$(tr -d '[:space:]' < "$ECL_VERSION_FILE")"
+fi
 
 # --------------------------------------------------------------------------- #
 # Defaults
@@ -230,10 +238,13 @@ if [[ "$MANIFEST_ONLY" != "true" ]]; then
   copy_file "templates/traversal-map.md"                "${TARGET}/templates/traversal-map.md"        "template"
   copy_file "templates/findings.md"                     "${TARGET}/templates/findings.md"             "template"
   copy_file "templates/scout-report.md"                 "${TARGET}/templates/scout-report.md"         "template"
-  copy_file "schemas/mission-brief.v1.json"             "${TARGET}/schemas/mission-brief.v1.json"     "other"
-  copy_file "schemas/findings.v1.json"                  "${TARGET}/schemas/findings.v1.json"          "other"
-  copy_file "schemas/scout-report.v1.json"              "${TARGET}/schemas/scout-report.v1.json"      "other"
-  copy_file "schemas/install.manifest.v1.json"          "${TARGET}/schemas/install.manifest.v1.json"  "other"
+  copy_file "schemas/mission-brief.v1.json"             "${TARGET}/schemas/mission-brief.v1.json"              "other"
+  copy_file "schemas/findings.v1.json"                  "${TARGET}/schemas/findings.v1.json"                 "other"
+  copy_file "schemas/scout-report.v1.json"              "${TARGET}/schemas/scout-report.v1.json"             "other"
+  copy_file "schemas/install.manifest.v1.json"          "${TARGET}/schemas/install.manifest.v1.json"         "other"
+  copy_file "schemas/scout-report-profile.v1.json"      "${TARGET}/schemas/scout-report-profile.v1.json"     "other"
+  copy_file "schemas/ecl-envelope.v1.json"              "${TARGET}/schemas/ecl-envelope.v1.json"             "other"
+  copy_file "templates/scout-report.envelope.json"      "${TARGET}/templates/scout-report.envelope.json"     "template"
   copy_file "evals/canary-missions.md"                  "${TARGET}/evals/canary-missions.md"          "other"
   copy_file ".github/copilot-instructions.md"           "${TARGET}/.github/copilot-instructions.md"   "dispatch"
   # Eidolons-nexus subcommands shipped by ATLAS. Auto-surfaced by the
@@ -622,6 +633,12 @@ if [[ ${#FILES_WRITTEN[@]} -gt 0 ]]; then
   FILES_JSON="$(printf '%s,' "${FILES_WRITTEN[@]}" | sed 's/,$//')"
 fi
 
+ECL_FIELD=""
+if [[ -n "$ECL_VERSION_EMITTED" ]]; then
+  ECL_FIELD="
+  \"ecl_version_emitted\": \"${ECL_VERSION_EMITTED}\","
+fi
+
 MANIFEST_CONTENT="{
   \"eidolon\": \"${EIDOLON_NAME}\",
   \"version\": \"${EIDOLON_VERSION}\",
@@ -637,7 +654,7 @@ MANIFEST_CONTENT="{
   \"token_budget\": {
     \"entry\": ${AGENT_TOKENS},
     \"working_set_target\": 1000
-  },
+  },${ECL_FIELD}
   \"security\": {
     \"reads_repo\": true,
     \"reads_network\": false,
@@ -650,8 +667,37 @@ MANIFEST_PATH="${TARGET}/install.manifest.json"
 do_action "write ${MANIFEST_PATH}" bash -c "printf '%s\n' '${MANIFEST_CONTENT//\'/\'\\\'\'}' > '${MANIFEST_PATH}'"
 
 if [[ "$DRY_RUN" != "true" ]]; then
-  # Write cleanly without shell escaping issues
-  cat > "${MANIFEST_PATH}" <<MANIFEST_EOF
+  # Write cleanly without shell escaping issues.
+  # ecl_version_emitted is injected only when ECL_VERSION is present (opt-in field).
+  if [[ -n "$ECL_VERSION_EMITTED" ]]; then
+    cat > "${MANIFEST_PATH}" <<MANIFEST_EOF
+{
+  "eidolon": "${EIDOLON_NAME}",
+  "version": "${EIDOLON_VERSION}",
+  "methodology": "${METHODOLOGY}",
+  "installed_at": "${INSTALLED_AT}",
+  "target": "${TARGET}",
+  "hosts_wired": [${HOSTS_JSON}],
+  "files_written": [${FILES_JSON}],
+  "handoffs_declared": {
+    "upstream": [],
+    "downstream": ["spectra", "apivr-delta"]
+  },
+  "token_budget": {
+    "entry": ${AGENT_TOKENS},
+    "working_set_target": 1000
+  },
+  "ecl_version_emitted": "${ECL_VERSION_EMITTED}",
+  "security": {
+    "reads_repo": true,
+    "reads_network": false,
+    "writes_repo": false,
+    "persists": [".atlas/.memex"]
+  }
+}
+MANIFEST_EOF
+  else
+    cat > "${MANIFEST_PATH}" <<MANIFEST_EOF
 {
   "eidolon": "${EIDOLON_NAME}",
   "version": "${EIDOLON_VERSION}",
@@ -676,6 +722,7 @@ if [[ "$DRY_RUN" != "true" ]]; then
   }
 }
 MANIFEST_EOF
+  fi
   log "Manifest: ${MANIFEST_PATH}"
 fi
 

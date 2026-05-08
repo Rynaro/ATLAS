@@ -7,6 +7,8 @@ role: Explorer/Scout — read-only codebase intelligence
 handoffs:
   upstream:   []
   downstream: [spectra, apivr-delta]
+comm:
+  envelope_version: "1.0"
 ---
 
 # AGENTS.md — ATLAS methodology (v1.0)

@@ -67,6 +67,8 @@ Three JSON schemas in `schemas/` enforce artifact structure:
 
 Any changes to artifact templates must keep the templates compliant with their schemas.
 
+ATLAS now also validates emitted envelope sidecars against `schemas/ecl-envelope.v1.json` (vendored from `eidolons-ecl/schemas/envelope.v1.json`).
+
 ## Evaluation
 
 The `evals/canary-missions.md` contains 15 hand-curated missions with ground-truth answers. Pass criteria per mission:
@@ -84,6 +86,8 @@ Target pass rate: ≥80%.
 ## Versioning Policy
 
 `ATLAS.md` is the authoritative spec. Breaking changes to phase contracts or JSON schemas require a minor-version bump. Implementations declare `methodology: ATLAS` and `methodology_version: 1.0` in their `agent.md` frontmatter.
+
+ATLAS targets ECL v1.0 (`ECL_VERSION` file); ECL adoption is additive and opt-in.
 
 ---
 

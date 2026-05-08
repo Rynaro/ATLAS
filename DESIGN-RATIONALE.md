@@ -163,6 +163,36 @@ most critical safety check) cannot be skipped even if a skill fails to load.
 
 ---
 
+## I-9 — ECL-conformant handoffs
+
+**Decision:** Phase S MUST emit a v1.0 ECL envelope sidecar
+(`scout-report.envelope.json`) adjacent to the `scout-report.md`. The
+envelope is a **terminal Phase-S artefact** — in the same class as the
+scout report itself — not a tool call. Envelope schema is vendored at
+`schemas/ecl-envelope.v1.json`; per-Eidolon profile at
+`schemas/scout-report-profile.v1.json`. ATLAS declares targeting ECL v1.0
+via a `ECL_VERSION` file at the repo root. Adoption is opt-in; existing
+consumers may ignore the sidecar without loss of scout-report functionality.
+
+**Rationale:** Inter-Eidolon handoffs are currently implicit — ATLAS emits a
+freeform `<handoff>` XML block in the scout report, which downstream agents
+(SPECTRA, APIVR-Δ) parse by convention. ECL v1.0 (ECL §1, §3) standardises
+this: the envelope carries a machine-readable identity (`from`/`to`), a
+`performative` (`PROPOSE` for ATLAS→SPECTRA), and an integrity checksum
+(`sha256`) that downstream tooling can verify without re-reading the report.
+Making the envelope a terminal artefact (not a tool) preserves the I-1
+read-only constraint — ATLAS's ACI has no `write` primitive; the envelope is
+an output of the Synthesize phase in exactly the same way `scout-report.md`
+is, written by the harness after the LLM signs off on the content. The
+per-Eidolon profile (ECL §3) provides a typed frontmatter contract
+(`scope.entrypoints`, `findings_count`, etc.) that lets the central ECL
+registry validate ATLAS handoffs without coupling to ATLAS's body schema.
+
+**Source:** `ECL_VERSION`, `ATLAS.md §1 I-9`, `ATLAS.md §2.5`,
+ECL spec §1 (envelope shape) + §3 (per-Eidolon profile contracts).
+
+---
+
 ## Three-strike halt in Phase L
 
 **Decision:** Three consecutive low-confidence (`L`) probes on one
