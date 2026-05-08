@@ -1,0 +1,294 @@
+id: aci-subagent-tools-multi-host
+status: draft
+owner: TBD
+created: "2026-04-28"
+target_repo: Rynaro/ATLAS
+upstream:
+  pr: 16
+  release: "1.2.2"
+  description: |
+    Claude Code subagent tools allowlist fix. `aci install` rewrites the
+    `tools:` line in `.claude/agents/atlas.md` to add the seven
+    `mcp__atlas-aci__*` entries; `aci remove` restores the BASE list.
+downstream:
+  agents: ["apivr-delta"]
+
+frame:
+  gap_pattern: |
+    ATLAS install.sh writes per-host subagent / agent / rule files. Some
+    hosts gate MCP-tool exposure per-agent via a flat tool-allowlist field
+    in YAML frontmatter; if that allowlist does not name `mcp__atlas-aci__*`,
+    the MCP server connects but its tools are silently filtered out, and
+    the subagent falls back to native Read+Grep.
+  audit_question: |
+    Does the per-host subagent / agent / rule file gate MCP-tool exposure
+    per-agent? If yes, the gap exists. If no (tools are global, or the
+    installer doesn't emit a tool-allowlist field), no fix needed.
+  reference_implementation:
+    file: commands/aci.sh
+    helpers:
+      - { name: _subagent_canonical_tools_base, lines: "1250-1252" }
+      - { name: _subagent_canonical_tools_with_mcp, lines: "1254-1260" }
+      - { name: _subagent_set_tools_line, lines: "1267-1284" }
+      - { name: subagent_extend_tools, lines: "1289-1299" }
+      - { name: subagent_restore_tools, lines: "1303-1310" }
+    call_sites:
+      - { function: apply_host_install, branch: claude-code, line: 1317 }
+      - { function: apply_host_remove,  branch: claude-code, line: 1351 }
+
+host_audits:
+  - host: codex
+    subagent_file:
+      path: .codex/agents/atlas.md
+      written_by: install.sh
+      lines: "540-591"
+    frontmatter_fields_emitted: [name, description]
+    mcp_wiring:
+      file: .codex/config.toml
+      mechanism: TOML table [mcp_servers.atlas-aci]
+      aci_function: wire_codex
+      aci_lines: "1081-1185"
+    permission_model: |
+      Codex's subagent contract permits an optional `tools:` field. When
+      `tools:` is absent (the installer's default), Codex inherits the
+      project's available tool set including MCP tools wired via
+      .codex/config.toml. No flat per-agent allowlist gates the global
+      MCP wiring.
+    evidence_lines:
+      - { file: install.sh, range: "537", note: "comment citing OpenAI Codex subagents docs — tools optional" }
+      - { file: install.sh, range: "544-547", note: "CODEX_AGENT frontmatter has only name + description" }
+    verdict: no_gap
+    rationale: |
+      The installer does not emit a `tools:` line, so there is nothing to
+      shadow the global TOML wiring. Adding one (and an aci.sh extender)
+      would be net-new behaviour, not a bug fix.
+    future_watch: |
+      If Codex evolves to require a `tools:` allowlist for MCP tools to
+      surface, re-open this decision and add a slot mirroring Claude Code.
+
+  - host: copilot
+    subagent_file:
+      path: .github/agents/*.agent.md
+      written_by: end-user (NOT install.sh)
+      install_sh_writes_instead:
+        - .github/copilot-instructions.md
+        - .github/instructions/<skill>.instructions.md
+    frontmatter_fields_emitted: []
+    mcp_wiring:
+      file: .github/agents/*.agent.md
+      mechanism: tools.mcp_servers[] YAML array (per-agent)
+      aci_function: copilot_install_one
+      aci_lines: "886-962"
+    permission_model: |
+      Copilot agents use `tools` as a map whose `mcp_servers` key holds
+      per-server entries. The MCP entry IS the permission grant; no
+      separate flat allowlist field shadows it once the server is
+      registered.
+    evidence_lines:
+      - { file: commands/aci.sh, range: "858-864", note: "copilot_list_all_agents — globs user-authored .agent.md files" }
+      - { file: commands/aci.sh, range: "907-945", note: "yq merges into .tools.mcp_servers[]" }
+      - { file: tests/helpers.bash, range: "262-273", note: "seed_copilot_agent_with_peer fixture confirms tools.mcp_servers shape" }
+    verdict: no_gap
+    rationale: |
+      aci.sh already manages copilot's MCP exposure correctly: the presence
+      of `{name: atlas-aci, …}` in `tools.mcp_servers` is the grant. There
+      is no parallel flat-string `tools:` allowlist that must additionally
+      name mcp__atlas-aci__<tool>. Adding one would duplicate the
+      permission and risk drift.
+    future_watch: |
+      If Copilot adopts a flat per-tool allowlist field analogous to
+      Claude Code's `tools:` string, re-open this decision.
+
+  - host: cursor
+    subagent_file:
+      path: .cursor/rules/atlas-<phase>.mdc
+      written_by: install.sh (via wire_skill)
+      lines: "414-432"
+    frontmatter_fields_emitted: [description, alwaysApply]
+    mcp_wiring:
+      file: .cursor/mcp.json
+      mechanism: JSON mcpServers."atlas-aci"
+      aci_function: json_install
+      aci_lines: "701-786"
+      call_site: { function: apply_host_install, branch: cursor, line: 1319 }
+    permission_model: |
+      Cursor MDC frontmatter exposes description, alwaysApply, and
+      optional globs/agents matchers. There is no per-rule `tools:`
+      allowlist. MCP tools are project-global via .cursor/mcp.json; rule
+      files do not gate or filter them.
+    evidence_lines:
+      - { file: install.sh, range: "421-426", note: "MDC frontmatter shape — no tool-allowlist field" }
+      - { file: install.sh, range: "486-494", note: "cursor host wiring block emits per-skill .mdc files only" }
+    verdict: no_gap
+    rationale: |
+      No equivalent of Claude Code's per-subagent `tools:` gate exists in
+      Cursor's contract. MCP exposure is already correctly managed via
+      project-global .cursor/mcp.json.
+
+  - host: opencode
+    subagent_file:
+      path: .opencode/agents/atlas.md
+      written_by: install.sh
+      lines: "496-532"
+    frontmatter_fields_emitted: [description, mode, permission]
+    mcp_wiring:
+      file: none
+      mechanism: not wired
+      aci_function: null
+      aci_exclusion_lines: "525-526"
+      aci_exclusion_note: "opencode is NOT included in detect_hosts_mcp; MCP capability not confirmed in spec revision §2.1 G2"
+    permission_model: |
+      The `permission` block has three top-level scopes: edit, write, bash.
+      The wildcard `"*": deny` (install.sh:511) lives INSIDE the `bash:`
+      namespace and only catches unmatched bash commands. There is no
+      `permission.mcp` or equivalent scope; MCP tool exposure is not
+      gated at the agent file level in opencode's current contract.
+    evidence_lines:
+      - { file: install.sh, range: "504-511", note: "permission.bash with wildcard; no permission.mcp" }
+      - { file: commands/aci.sh, range: "525-526", note: "opencode explicitly excluded from MCP host detection" }
+    verdict: no_gap
+    rationale: |
+      Two compounding reasons: (a) aci.sh does not wire MCP for opencode
+      at all today, so there is no MCP config to which an allowlist could
+      be a missing gate; (b) even if MCP wiring is added later, the
+      existing permission block has no per-MCP-tool allowlist field — the
+      wildcard deny is bash-scoped only.
+    future_watch: |
+      When opencode MCP wiring lands (separate spec), revisit whether the
+      contract has evolved to include a per-tool allowlist field.
+
+audit_summary:
+  hosts_audited: 4
+  hosts_with_gap: 0
+  hosts_without_gap: 4
+  by_verdict:
+    no_gap: [codex, copilot, cursor, opencode]
+    gap: []
+  hypothesis_outcome: not_borne_out
+  hypothesis_text: |
+    "And probably will do the same with other toolings" — investigated and
+    refuted with per-host line-cited evidence. Each non-Claude-Code host
+    either (a) does not gate MCP tools per-agent, (b) gates them through a
+    different mechanism aci.sh already manages, or (c) does not currently
+    emit a tool-allowlist field at all.
+
+implementation_contracts: []
+
+reserved_namespaces:
+  description: |
+    Reserved for future use if any host's contract evolves to introduce a
+    per-subagent flat tool allowlist that shadows global MCP wiring. Each
+    host's namespace is orthogonal so parallel APIVR-Δ worktrees would not
+    collide on common helpers.
+  slots:
+    - host: codex
+      helpers:
+        - _subagent_codex_canonical_tools_base
+        - _subagent_codex_canonical_tools_with_mcp
+        - _subagent_codex_set_tools_line
+        - subagent_codex_extend_tools
+        - subagent_codex_restore_tools
+      call_sites:
+        - { function: apply_host_install, branch: codex, approx_line: 1320 }
+        - { function: apply_host_remove,  branch: codex, approx_line: 1354 }
+      bats_test_range: SUB-7..SUB-12
+    - host: copilot
+      helpers:
+        - _subagent_copilot_canonical_tools_base
+        - _subagent_copilot_canonical_tools_with_mcp
+        - _subagent_copilot_set_tools_line
+        - subagent_copilot_extend_tools
+        - subagent_copilot_restore_tools
+      call_sites:
+        - { function: copilot_install_one, branch: post-merge, approx_line: 945 }
+        - { function: copilot_remove_one,  branch: post-del,   approx_line: 992 }
+      bats_test_range: SUB-13..SUB-18
+    - host: cursor
+      helpers:
+        - _subagent_cursor_canonical_tools_base
+        - _subagent_cursor_canonical_tools_with_mcp
+        - _subagent_cursor_set_tools_line
+        - subagent_cursor_extend_tools
+        - subagent_cursor_restore_tools
+      call_sites:
+        - { function: apply_host_install, branch: cursor, approx_line: 1319 }
+        - { function: apply_host_remove,  branch: cursor, approx_line: 1353 }
+      bats_test_range: SUB-19..SUB-24
+    - host: opencode
+      helpers:
+        - _subagent_opencode_canonical_tools_base
+        - _subagent_opencode_canonical_tools_with_mcp
+        - _subagent_opencode_set_tools_line
+        - subagent_opencode_extend_tools
+        - subagent_opencode_restore_tools
+      call_sites: []
+      call_sites_note: "opencode not yet wired for MCP — slot dormant pending separate spec."
+      bats_test_range: SUB-25..SUB-30
+
+orchestration:
+  slots_required: 0
+  rationale: |
+    All four hosts audited returned NO GAP. No APIVR-Δ implementation work
+    is needed. Spec is verdict-only.
+  template_for_future_use:
+    merge_point: commands/aci.sh
+    conflict_avoidance: |
+      Each slot owns a distinct function namespace (see reserved_namespaces)
+      and a distinct branch inside apply_host_install / apply_host_remove.
+      Multiple APIVR-Δ worktrees can run in parallel because helpers are
+      per-host-prefixed.
+    integration_order: alphabetical_by_host_name
+    branch_convention: "fix/aci-subagent-tools-<host>"
+    version_bump: patch
+    shared_helpers_policy: |
+      _subagent_set_tools_line is Claude-Code-specific (flat-string `tools:`).
+      Each new host gets its own _set_tools_line variant tailored to its
+      frontmatter shape; the Claude Code helper is not generalised.
+
+validation_gates:
+  spec_review:
+    - id: SPEC-1
+      description: All four host sections cite specific install.sh and/or aci.sh line references
+      status: pending
+    - id: SPEC-2
+      description: No source files modified (commands/aci.sh, install.sh, tests/aci.bats)
+      status: pending
+    - id: SPEC-3
+      description: YAML manifest mirrors markdown structure (host_audits, contracts, orchestration, gates)
+      status: pending
+  implementation_template:
+    description: |
+      Template gates only — applicable IF a future audit flips a verdict
+      and an APIVR-Δ slot is opened. Not active for this spec.
+    gates:
+      - id: IMPL-1
+        description: bats tests/aci.bats passes including new SUB-<N> cases
+      - id: IMPL-2
+        description: shellcheck -x -S error commands/aci.sh reports no errors
+      - id: IMPL-3
+        description: Two consecutive aci install runs produce byte-identical host files
+      - id: IMPL-4
+        description: aci remove restores installer-shipped baseline byte-for-byte
+      - id: IMPL-5
+        description: --dry-run emits MODIFY <path> and touches no disk state
+      - id: IMPL-6
+        description: Body of host file (markdown content after frontmatter) preserved byte-for-byte across install→remove
+      - id: IMPL-7
+        description: No regressions in SUB-1..SUB-6, G5..G19, IDX-1..IDX-9
+
+out_of_scope:
+  - "Behavioural change to Claude Code wiring (PR 16 / 1.2.2 is authoritative)"
+  - "Reorganisation of install.sh per-host wiring blocks"
+  - "Generalisation of _subagent_set_tools_line into a host-agnostic helper"
+  - "opencode MCP wiring (tracked under §2.1 G2 in governing aci.sh spec)"
+  - "Codex tools: field emission by install.sh (would be a new spec)"
+  - "End-user hand-edits to .codex/agents/atlas.md adding a tools: field"
+
+references:
+  - { kind: pr, repo: Rynaro/ATLAS, number: 16, label: "Claude Code subagent tools allowlist fix (1.2.2)" }
+  - { kind: source, file: commands/aci.sh, range: "1229-1310", label: "Claude Code helpers (canonical reference shape)" }
+  - { kind: source, file: commands/aci.sh, range: "1313-1375", label: "apply_host_install / apply_host_remove dispatch" }
+  - { kind: source, file: install.sh,      range: "443-591",   label: "Per-host wiring blocks (claude-code, copilot, cursor, opencode, codex)" }
+  - { kind: source, file: tests/aci.bats,  range: "911-1038",  label: "SUB-1..SUB-6 Claude Code subagent tools tests" }
+  - { kind: source, file: tests/helpers.bash, range: "182-198", label: "seed_claude_atlas_subagent fixture pattern" }
+  - { kind: external, url: "https://developers.openai.com/codex/subagents", label: "Codex subagent contract" }
