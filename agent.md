@@ -8,7 +8,7 @@ methodology_version: "1.0"
 role: Explorer/Scout — read-only codebase intelligence
 handoffs: [spectra, apivr]
 comm:
-  envelope_version: "1.2"
+  envelope_version: "2.0"
 ---
 
 # ATLAS — Explorer/Scout Agent

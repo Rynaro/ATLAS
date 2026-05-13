@@ -8,7 +8,7 @@ handoffs:
   upstream:   []
   downstream: [spectra, apivr-delta]
 comm:
-  envelope_version: "1.2"
+  envelope_version: "2.0"
 ---
 
 # AGENTS.md — ATLAS methodology (v1.0)
