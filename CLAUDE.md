@@ -12,13 +12,13 @@ ATLAS is the first agent in a three-part pipeline: **ATLAS (scout) → SPECTRA (
 
 ```
 atlas/
-├── ATLAS.md                          # Authoritative full specification
+├── SPEC.md                           # Authoritative full specification
 ├── agent.md                          # Always-loaded agent profile (≤1000 tokens)
-├── skills/                           # Progressive-disclosure phase skills
-│   ├── traverse/SKILL.md             # Phase T — deterministic structural mapping
-│   ├── locate/SKILL.md               # Phase L — bounded probes + operator pattern
-│   ├── abstract/SKILL.md             # Phase A — AgentFold + Memex
-│   └── synthesize/SKILL.md           # Phase S — scout report emission
+├── skills/                           # Progressive-disclosure phase skills (flat .md)
+│   ├── traverse.md                   # Phase T — deterministic structural mapping
+│   ├── locate.md                     # Phase L — bounded probes + operator pattern
+│   ├── abstract.md                   # Phase A — AgentFold + Memex
+│   └── synthesize.md                 # Phase S — scout report emission
 ├── templates/                        # Fill-in-the-blank output artifacts
 ├── tools/                            # Implementation guides (ACI spec, MCP reference)
 ├── schemas/                          # JSON Schema validators for artifacts
@@ -85,7 +85,7 @@ Target pass rate: ≥80%.
 
 ## Versioning Policy
 
-`ATLAS.md` is the authoritative spec. Breaking changes to phase contracts or JSON schemas require a minor-version bump. Implementations declare `methodology: ATLAS` and `methodology_version: 1.0` in their `agent.md` frontmatter.
+`SPEC.md` is the authoritative spec. Breaking changes to phase contracts or JSON schemas require a minor-version bump. Implementations declare `methodology: ATLAS` and `methodology_version: 1.0` in their `agent.md` frontmatter.
 
 ATLAS targets ECL v1.0 (`ECL_VERSION` file); ECL adoption is additive and opt-in.
 
@@ -99,8 +99,8 @@ finds the installed agent at `.eidolons/atlas/agent.md`.
 **Load order in consumer projects:**
 
 1. `.eidolons/atlas/agent.md` — entry point, always loaded (≤1000 tokens)
-2. `.eidolons/atlas/ATLAS.md` — full methodology specification
-3. `.eidolons/atlas/skills/<phase>/SKILL.md` — on-demand per phase
+2. `.eidolons/atlas/SPEC.md` — full methodology specification
+3. `.eidolons/atlas/skills/<phase>.md` — on-demand per phase (flat file)
 4. `.eidolons/atlas/templates/<artifact>.md` — on-demand per output type
 
 **Quick install:**

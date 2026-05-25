@@ -116,7 +116,7 @@ fold_ratio:       <float>   # target ≤ 0.1
 Emit a `scout-report.envelope.json` adjacent to this report. Use
 `templates/scout-report.envelope.json` as the skeleton. Fill all
 `<placeholder>` values before emitting. The envelope is a terminal
-Phase-S artefact (not a tool call — see `ATLAS.md §1 I-9` and
+Phase-S artefact (not a tool call — see `SPEC.md §1 I-9` and
 `skills/synthesize/SKILL.md §Envelope sidecar`).
 
 Validate against `schemas/ecl-envelope.v1.json` before marking Phase S

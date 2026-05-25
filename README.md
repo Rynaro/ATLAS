@@ -57,7 +57,7 @@ open-weight models. MCP is the recommended transport but not required.
 - **Explicit stop conditions.** Missions declare a `DECISION_TARGET`; ATLAS
   halts when it is answered, not when the model feels done.
 
-See `ATLAS.md` for the full specification.
+See `SPEC.md` for the full specification.
 
 ---
 
@@ -68,17 +68,17 @@ atlas/
 ├── README.md                   # this file
 ├── INSTALL.md                  # cross-platform installation guide
 ├── AGENTS.md                   # open-standard rule set (Copilot/Cursor/OpenCode)
-├── ATLAS.md                    # methodology specification (authoritative)
+├── SPEC.md                     # methodology specification (authoritative)
 ├── agent.md                    # always-loaded agent profile (≤1000 tokens)
 │
 ├── .github/
 │   └── copilot-instructions.md # GitHub Copilot primary entry point
 │
-├── skills/                     # progressive-disclosure skills (YAML frontmatter)
-│   ├── traverse/SKILL.md       # Phase T — structural mapping
-│   ├── locate/SKILL.md         # Phase L — bounded probes, scatter
-│   ├── abstract/SKILL.md       # Phase A — AgentFold + Memex
-│   └── synthesize/SKILL.md     # Phase S — scout report
+├── skills/                     # progressive-disclosure skills (flat .md per phase)
+│   ├── traverse.md             # Phase T — structural mapping
+│   ├── locate.md               # Phase L — bounded probes, scatter
+│   ├── abstract.md             # Phase A — AgentFold + Memex
+│   └── synthesize.md           # Phase S — scout report
 │
 ├── templates/                  # fill-in-the-blank artifact templates
 │   ├── mission-brief.md

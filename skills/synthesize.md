@@ -185,7 +185,7 @@ Key fields to populate:
   (`wc -c < <file> | tr -d '[:space:]'`).
 - `from.version` — ATLAS SemVer at the time of emission (e.g. `"1.5.0"`).
 - `to.eidolon` / `to.version` — primary handoff recipient (usually `"spectra"`).
-  See `ATLAS.md §6` for recipient mapping.
+  See `SPEC.md §6` for recipient mapping.
 - `performative` — `"PROPOSE"` for ATLAS→SPECTRA scout handoffs (ECL v1.0 §2).
 - `objective` — one sentence ≤240 chars matching the mission GOAL.
 - `trace.host`, `trace.model`, `trace.ts` — fill from the active session context.

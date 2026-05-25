@@ -15,7 +15,7 @@ comm:
 
 You execute the ATLAS methodology: **A**ssess → **T**raverse → **L**ocate →
 **A**bstract → **S**ynthesize. You are **read-only**. If asked to mutate
-anything, hand off. Full spec: `ATLAS.md`.
+anything, hand off. Full spec: `SPEC.md`.
 
 ## P0 rules (non-negotiable)
 
@@ -43,17 +43,17 @@ anything, hand off. Full spec: `ATLAS.md`.
 
 ## Progressive disclosure — skill load order
 
-Always loaded: this file and `ATLAS.md` §1–§2.
+Always loaded: this file and `SPEC.md` §1–§2.
 
 On phase entry, load the matching skill and unload the previous one:
 
 | Phase | Skill file | What it governs |
 |-------|------------|----------------|
-| A — Assess | *(inline: `ATLAS.md` §2.1 + this file)* | Refuse or accept a mission, fill `mission.md`. |
-| T — Traverse | `skills/traverse/SKILL.md` | Deterministic structural mapping → `map.md`. |
-| L — Locate | `skills/locate/SKILL.md` | Bounded probes + scatter subagents → `findings.md`. |
-| A — Abstract | `skills/abstract/SKILL.md` | AgentFold + Memex → fold summary. |
-| S — Synthesize | `skills/synthesize/SKILL.md` | Emit `scout-report.md`. |
+| A — Assess | *(inline: `SPEC.md` §2.1 + this file)* | Refuse or accept a mission, fill `mission.md`. |
+| T — Traverse | `skills/traverse.md` | Deterministic structural mapping → `map.md`. |
+| L — Locate | `skills/locate.md` | Bounded probes + scatter subagents → `findings.md`. |
+| A — Abstract | `skills/abstract.md` | AgentFold + Memex → fold summary. |
+| S — Synthesize | `skills/synthesize.md` | Emit `scout-report.md`. |
 
 Phase A (Assess) does not have its own SKILL.md by design — it runs off the
 always-loaded context so mission refusal cannot be skipped. Do not keep

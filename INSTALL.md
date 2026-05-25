@@ -82,7 +82,7 @@ git submodule update --init
 
 ```bash
 curl -L https://github.com/Rynaro/atlas/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=1 -C .atlas atlas-main/{agent.md,ATLAS.md,AGENTS.md,skills,templates,schemas}
+  | tar -xz --strip-components=1 -C .atlas atlas-main/{agent.md,SPEC.md,AGENTS.md,skills,templates,schemas}
 ```
 
 ### Target layout
@@ -93,7 +93,7 @@ After Step 1 your repo should contain:
 <your-repo>/
 ├── .atlas/
 │   ├── agent.md                       # always-loaded profile
-│   ├── ATLAS.md                       # authoritative spec
+│   ├── SPEC.md                       # authoritative spec
 │   ├── AGENTS.md                      # open-standard rules file
 │   ├── skills/
 │   │   ├── traverse/SKILL.md
@@ -233,11 +233,11 @@ description: ATLAS v1.0 — read-only codebase scout methodology. Always applied
 alwaysApply: true
 ---
 
-See `.atlas/AGENTS.md` for the full rule set and `.atlas/ATLAS.md` for the
+See `.atlas/AGENTS.md` for the full rule set and `.atlas/SPEC.md` for the
 v1.0 specification.
 
 The five phases and their skill files:
-- Phase A (Assess) — inline, see `.atlas/ATLAS.md` §2.1
+- Phase A (Assess) — inline, see `.atlas/SPEC.md` §2.1
 - Phase T (Traverse) — `.atlas/skills/traverse/SKILL.md` → see @atlas-traverse
 - Phase L (Locate) — `.atlas/skills/locate/SKILL.md` → see @atlas-locate
 - Phase A (Abstract) — `.atlas/skills/abstract/SKILL.md` → see @atlas-abstract
@@ -370,7 +370,7 @@ Always-loaded profile: `.atlas/agent.md`. Phase skills live in
 `.atlas/skills/<phase>/SKILL.md`.
 
 When switching phases, load only the matching SKILL.md for that phase.
-See `.atlas/ATLAS.md` §2 for the full phase spec.
+See `.atlas/SPEC.md` §2 for the full phase spec.
 ```
 
 **2d.3 Phase subagents.** Create one `.opencode/agents/atlas-<phase>.md`
@@ -435,7 +435,7 @@ Run this smoke test on any of the four hosts after Step 2.
 
 **Regression gate.** For CI, run any mission from `.atlas/evals/canary-missions.md`
 (15 available) and compare against the `expected/answer.md` ground truth.
-Target ≥80% pass rate across the full suite per §5 of `ATLAS.md`.
+Target ≥80% pass rate across the full suite per §5 of `SPEC.md`.
 
 ---
 
@@ -655,7 +655,7 @@ field name verbatim; downstream schemas parse them."*
 
 ## See also
 
-- `ATLAS.md` — authoritative v1.0 specification
+- `SPEC.md` — authoritative v1.0 specification
 - `AGENTS.md` — open-standard rule set (Copilot / Cursor / OpenCode)
 - `agent.md` — always-loaded agent profile
 - `skills/<phase>/SKILL.md` — progressive-disclosure phase skills

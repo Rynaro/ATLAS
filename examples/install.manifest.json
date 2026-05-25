@@ -1,23 +1,37 @@
 {
   "eidolon": "atlas",
-  "version": "1.0.6",
+  "version": "1.6.0",
   "methodology": "ATLAS",
-  "installed_at": "2026-04-25T00:00:00Z",
+  "installed_at": "2026-05-25T00:00:00Z",
   "target": "./.eidolons/atlas",
-  "hosts_wired": ["codex"],
+  "spec_file": ".eidolons/atlas/SPEC.md",
+  "hosts_wired": ["claude-code"],
   "files_written": [
     {"path": "./.eidolons/atlas/agent.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "entry-point", "mode": "created"},
     {"path": "./.eidolons/atlas/AGENTS.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "entry-point", "mode": "created"},
-    {"path": "./.eidolons/atlas/ATLAS.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "spec", "mode": "created"},
-    {"path": "AGENTS.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"},
-    {"path": ".codex/agents/atlas.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"}
+    {"path": "./.eidolons/atlas/SPEC.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "spec", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/traverse.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-traverse/SKILL.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/locate.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-locate/SKILL.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/abstract.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-abstract/SKILL.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/synthesize.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-synthesize/SKILL.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/agents/atlas.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"}
+  ],
+  "skills": [
+    {"name": "traverse", "source_path": ".eidolons/atlas/skills/traverse.md", "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-traverse/SKILL.md", "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "locate",   "source_path": ".eidolons/atlas/skills/locate.md",   "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-locate/SKILL.md",   "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "abstract", "source_path": ".eidolons/atlas/skills/abstract.md", "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-abstract/SKILL.md", "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "synthesize","source_path": ".eidolons/atlas/skills/synthesize.md","source_sha256":"0000000000000000000000000000000000000000000000000000000000000000","vendor_path": ".claude/skills/atlas-synthesize/SKILL.md","vendor_sha256":"0000000000000000000000000000000000000000000000000000000000000000"}
   ],
   "handoffs_declared": {
     "upstream": [],
     "downstream": ["spectra", "apivr-delta"]
   },
   "token_budget": {
-    "entry": 842,
+    "entry": 980,
     "working_set_target": 1000
   },
   "security": {
