@@ -652,7 +652,10 @@ if [[ ${#FILES_WRITTEN[@]} -gt 0 ]]; then
 fi
 
 # EIIS v1.3: spec_file field (canonical full-spec path)
+# Strip any leading "./" from TARGET so the manifest records the canonical
+# form (.eidolons/atlas/SPEC.md) regardless of how --target was supplied.
 SPEC_FILE_PATH="${TARGET}/SPEC.md"
+SPEC_FILE_PATH="${SPEC_FILE_PATH#./}"
 
 # EIIS v1.3: skills array — build JSON for each skill's dual-write pair.
 # Source-of-truth SHA is computed from the installed flat file.
