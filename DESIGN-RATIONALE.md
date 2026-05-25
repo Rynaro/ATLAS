@@ -1,7 +1,7 @@
 # ATLAS Design Rationale
 
 This document maps each ATLAS architectural decision to the research or
-engineering constraint that motivated it. It is a companion to `ATLAS.md`
+engineering constraint that motivated it. It is a companion to `SPEC.md`
 (the authoritative spec) and `CHANGELOG.md` (release history).
 
 ---
@@ -19,7 +19,7 @@ creep that pulls the scout into implementation. A hard harness-level read-only
 surface survives model swaps and prompt injection; a model-level instruction
 does not.
 
-**Source:** `ATLAS.md §1`, `tools/bounded-aci-spec.md`
+**Source:** `SPEC.md §1`, `tools/bounded-aci-spec.md`
 
 ---
 
@@ -36,7 +36,7 @@ are empirically derived from the canary-mission evaluation set: they admit
 the 95th-percentile task without overflow while keeping single-call token
 cost predictable.
 
-**Source:** `ATLAS.md §1 I-2`, `tools/bounded-aci-spec.md §2`
+**Source:** `SPEC.md §1 I-2`, `tools/bounded-aci-spec.md §2`
 
 ---
 
@@ -53,7 +53,7 @@ targets a search-efficiency ratio η ≥ 0.25 (relevant-tokens ÷ total-tokens)
 which is difficult to achieve if the model is generating queries rather than
 executing structured lookups.
 
-**Source:** `ATLAS.md §1 I-3`, `evals/canary-missions.md §5`
+**Source:** `SPEC.md §1 I-3`, `evals/canary-missions.md §5`
 
 ---
 
@@ -70,7 +70,7 @@ one-paragraph claim) is the minimal sufficient unit for the parent to reason
 about. Keeping transcripts separate also enables per-FINDING confidence
 assessment without entanglement.
 
-**Source:** `ATLAS.md §1 I-4`, `skills/locate/SKILL.md §3`
+**Source:** `SPEC.md §1 I-4`, `skills/locate/SKILL.md §3`
 
 ---
 
@@ -89,7 +89,7 @@ The ≤2000 token working-memory target is chosen so the always-loaded profile
 (agent.md ≤1000 tokens) + working memory (≤2000 tokens) + active skill
 (≤200 tokens) fit comfortably within a 4k always-loaded slot.
 
-**Source:** `ATLAS.md §1 I-5`, `skills/abstract/SKILL.md`
+**Source:** `SPEC.md §1 I-5`, `skills/abstract/SKILL.md`
 
 ---
 
@@ -106,7 +106,7 @@ the median phase produces ~2000 tokens of new context; 15% of a 32k context
 window is ~4800 tokens, which is sufficient for two median phases plus the
 fold overhead.
 
-**Source:** `ATLAS.md §1 I-6`, `agent.md §Telemetry`
+**Source:** `SPEC.md §1 I-6`, `agent.md §Telemetry`
 
 ---
 
@@ -124,7 +124,7 @@ short inference, `L` = plausible but unanchored) give the downstream agent
 a signal to weight claims accordingly. Schema validation of anchors makes
 this a mechanical check, not a model-level request.
 
-**Source:** `ATLAS.md §1 I-7`, `schemas/scout-report.v1.json`
+**Source:** `SPEC.md §1 I-7`, `schemas/scout-report.v1.json`
 
 ---
 
@@ -142,7 +142,7 @@ matters: once it is answerable with sufficient confidence, the mission is
 complete. The three-strike halt (I-8 companion: three consecutive
 `L`-confidence probes) enforces the same principle at the sub-question level.
 
-**Source:** `ATLAS.md §1 I-8`, `ATLAS.md §2.1`
+**Source:** `SPEC.md §1 I-8`, `SPEC.md §2.1`
 
 ---
 
@@ -159,7 +159,7 @@ disclosure keeps the always-loaded footprint at `agent.md` + one skill at a
 time. Phase A deliberately has no skill file so that mission refusal (the
 most critical safety check) cannot be skipped even if a skill fails to load.
 
-**Source:** `agent.md §Progressive disclosure`, `ATLAS.md §2`
+**Source:** `agent.md §Progressive disclosure`, `SPEC.md §2`
 
 ---
 
@@ -188,7 +188,7 @@ per-Eidolon profile (ECL §3) provides a typed frontmatter contract
 (`scope.entrypoints`, `findings_count`, etc.) that lets the central ECL
 registry validate ATLAS handoffs without coupling to ATLAS's body schema.
 
-**Source:** `ECL_VERSION`, `ATLAS.md §1 I-9`, `ATLAS.md §2.5`,
+**Source:** `ECL_VERSION`, `SPEC.md §1 I-9`, `SPEC.md §2.5`,
 ECL spec §1 (envelope shape) + §3 (per-Eidolon profile contracts).
 
 ---
@@ -206,4 +206,4 @@ is more useful to downstream agents than an inconclusive probe loop. The
 "three-strike" threshold is a practical trade-off: one strike could be noise;
 three consecutive failures indicates a genuine gap.
 
-**Source:** `ATLAS.md §2.3`, `skills/locate/SKILL.md`
+**Source:** `SPEC.md §2.3`, `skills/locate/SKILL.md`

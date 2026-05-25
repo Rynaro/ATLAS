@@ -7,6 +7,41 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.6.0] — 2026-05-25 — EIIS v1.3 install layout normalization
+
+### Changed
+
+- **BREAKING:** Full-spec source file renamed `ATLAS.md` → `SPEC.md`. The
+  installed destination at `.eidolons/atlas/SPEC.md` was `ATLAS.md` in prior
+  releases; any consumer that hard-codes the old path must update their
+  reference. (EIIS v1.3 §1.8.)
+- **BREAKING:** Skills layout flattened from `skills/<phase>/SKILL.md`
+  (sub-directory per phase) to `skills/<phase>.md` (flat file per phase).
+  Installed paths change from `.eidolons/atlas/skills/traverse/SKILL.md` →
+  `.eidolons/atlas/skills/traverse.md` (and similarly for `locate`,
+  `abstract`, `synthesize`). Vendor copies at
+  `.claude/skills/atlas-<phase>/SKILL.md` are **unchanged** in path.
+- `install.sh` `wire_skill` helper refactored: single helper now performs
+  both the source-of-truth write (flat `.md`) and the Claude Code vendor copy
+  (`atlas-<phase>/SKILL.md`), plus Copilot and Cursor vendor copies. The
+  previous helper only handled vendor writes.
+- `agent.md`: skill file references updated (`skills/<phase>/SKILL.md` →
+  `skills/<phase>.md`); spec reference updated (`ATLAS.md` → `SPEC.md`).
+- `CLAUDE.md`, `README.md`: filename literal `ATLAS.md` → `SPEC.md` where it
+  refers to the spec file; the methodology name "ATLAS" is unchanged.
+
+### Added
+
+- Manifest now includes `eiis_version: "1.3"`, `spec_file` (canonical
+  spec path), and `skills[]` array (dual-write source + vendor SHA pairs)
+  per EIIS v1.3 §1.8 and §4.2.4.
+
+### Compliance
+
+- `EIIS_VERSION` bumped from `1.1` to `1.3`.
+
+---
+
 ## [1.5.2] — 2026-05-13 — declare ECL v2.0 conformance
 
 ### Changed

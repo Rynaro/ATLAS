@@ -99,8 +99,8 @@ phase: T | tokens_in: 4231 | tokens_out: 812 | tool_calls: 14 | fold_ratio: 0.18
 
 ## Full specification
 
-`ATLAS.md` at repo root is the authoritative v1.0 spec. When this file and
-`ATLAS.md` disagree, `ATLAS.md` wins.
+`SPEC.md` at repo root is the authoritative v1.0 spec. When this file and
+`SPEC.md` disagree, `SPEC.md` wins.
 
 ## Identity
 

@@ -13,7 +13,7 @@
 
 ATLAS is a **read-only** methodology for codebase exploration and Plan-Mode
 reasoning. It is the Scout that runs *before* any implementation agent
-(SPECTRA for spec, APIVR-Δ for build). Full v1.0 spec: `ATLAS.md`.
+(SPECTRA for spec, APIVR-Δ for build). Full v1.0 spec: `SPEC.md`.
 
 ## Non-negotiable rules
 
@@ -47,7 +47,7 @@ repository, you MUST follow these:
 
 | Phase | Artifact | Skill file |
 |-------|----------|------------|
-| A — Assess | `mission.md` | *(inline: `ATLAS.md` §2.1)* |
+| A — Assess | `mission.md` | *(inline: `SPEC.md` §2.1)* |
 | T — Traverse | `map.md` | `skills/traverse/SKILL.md` |
 | L — Locate | `findings.md` | `skills/locate/SKILL.md` |
 | A — Abstract | fold summary + Memex | `skills/abstract/SKILL.md` |
@@ -67,6 +67,6 @@ Every recommended action in a `scout-report.md` carries exactly one label:
 ## See also
 
 - `AGENTS.md` — full rule set (open standard)
-- `ATLAS.md` — authoritative v1.0 specification
+- `SPEC.md` — authoritative v1.0 specification
 - `skills/*/SKILL.md` — progressive-disclosure phase skills
 - `.github/instructions/*.instructions.md` — path-scoped rules for this repo

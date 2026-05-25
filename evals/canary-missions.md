@@ -66,7 +66,7 @@ failure_class:     NONE | UNDER_SCOPED | OVER_EXPLORED | DEAD_END |
 
 ## CI gate
 
-Recommended: run the canary suite on every change to `ATLAS.md`, any skill
+Recommended: run the canary suite on every change to `SPEC.md`, any skill
 file, or any template. Fail the PR if:
 
 - Aggregate pass rate drops below last merged main by ≥ 10%.

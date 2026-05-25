@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# ATLAS installer — EIIS v1.1 conformant
+# ATLAS installer — EIIS v1.3 conformant
 # Usage: bash install.sh [OPTIONS]
 set -euo pipefail
 
 EIDOLON_NAME="atlas"
-EIDOLON_VERSION="1.5.2"
+EIDOLON_SLUG="atlas"
+EIDOLON_VERSION="1.6.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -204,10 +205,7 @@ maybe_mkdir() {
 }
 
 maybe_mkdir "${TARGET}"
-maybe_mkdir "${TARGET}/skills/traverse"
-maybe_mkdir "${TARGET}/skills/locate"
-maybe_mkdir "${TARGET}/skills/abstract"
-maybe_mkdir "${TARGET}/skills/synthesize"
+maybe_mkdir "${TARGET}/skills"
 maybe_mkdir "${TARGET}/templates"
 maybe_mkdir "${TARGET}/schemas"
 maybe_mkdir "${TARGET}/evals"
@@ -228,12 +226,8 @@ copy_file() {
 
 if [[ "$MANIFEST_ONLY" != "true" ]]; then
   copy_file "agent.md"                                  "${TARGET}/agent.md"                          "entry-point"
-  copy_file "ATLAS.md"                                  "${TARGET}/ATLAS.md"                          "spec"
+  copy_file "SPEC.md"                                   "${TARGET}/SPEC.md"                           "spec"
   copy_file "AGENTS.md"                                 "${TARGET}/AGENTS.md"                         "entry-point"
-  copy_file "skills/traverse/SKILL.md"                  "${TARGET}/skills/traverse/SKILL.md"          "skill"
-  copy_file "skills/locate/SKILL.md"                    "${TARGET}/skills/locate/SKILL.md"            "skill"
-  copy_file "skills/abstract/SKILL.md"                  "${TARGET}/skills/abstract/SKILL.md"          "skill"
-  copy_file "skills/synthesize/SKILL.md"                "${TARGET}/skills/synthesize/SKILL.md"        "skill"
   copy_file "templates/mission-brief.md"                "${TARGET}/templates/mission-brief.md"        "template"
   copy_file "templates/traversal-map.md"                "${TARGET}/templates/traversal-map.md"        "template"
   copy_file "templates/findings.md"                     "${TARGET}/templates/findings.md"             "template"
@@ -340,7 +334,7 @@ upsert_eidolon_block() {
 SHARED_BLOCK="## ATLAS — Read-only codebase scout (v${EIDOLON_VERSION})
 
 Entry:     \`${TARGET}/agent.md\`
-Full spec: \`${TARGET}/ATLAS.md\`
+Full spec: \`${TARGET}/SPEC.md\`
 Cycle:     A (Assess) → T (Traverse) → L (Locate) → A (Abstract) → S (Synthesize)
 
 **P0 (non-negotiable):** read-only (refuse edit/write/commit/deploy/migrate/refactor/fix); mission-first (requires \`mission.md\` + \`DECISION_TARGET\`); bounded ACI (\`view_file\` ≤100, \`search_text\` ≤50, \`list_dir\` ≤200); evidence-anchored claims (\`path:line\` + H|M|L); deterministic retrieval first, LLM search last."
@@ -379,35 +373,58 @@ extract_fm_field() {
   ' "$1"
 }
 
-# wire_skill <src_dir> <skill_name> — writes one skill into every wired vendor
+# wire_skill <skill_name>
+#
+# Dual-writes a skill file (EIIS v1.3 §4.2.4):
+#   - source-of-truth: ${TARGET}/skills/<skill_name>.md   (flat, per-file)
+#   - vendor copy:     .claude/skills/${EIDOLON_SLUG}-<skill_name>/SKILL.md
+#
+# Also writes copilot (.github/instructions/) and cursor (.cursor/rules/)
+# vendor copies when those hosts are wired.
+#
+# Source file resolved as: ${SCRIPT_DIR}/skills/<skill_name>.md
+# Bash 3.2 compatible (no associative arrays, no ${var,,}, no readarray).
 wire_skill() {
-  local src_dir="$1" skill_name="$2"
-  local src_skill="${src_dir}/SKILL.md"
-  [[ -f "$src_skill" ]] || { warn "skill source missing: ${src_skill}"; return; }
+  local skill="$1"
+  local src="${SCRIPT_DIR}/skills/${skill}.md"
+  local dst_src="${TARGET}/skills/${skill}.md"
+  local dst_vendor=".claude/skills/${EIDOLON_SLUG}-${skill}/SKILL.md"
+
+  if [ ! -f "${src}" ]; then
+    warn "skill source not found: ${src}"; return
+  fi
 
   local description
-  description="$(extract_fm_field "$src_skill" "description")"
-  [[ -z "$description" ]] && description="${skill_name}"
+  description="$(extract_fm_field "$src" "description")"
+  [ -z "$description" ] && description="${skill}"
 
+  # Source-of-truth write (host-independent, always done)
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "  [dry-run] copy ${src} → ${dst_src}"
+  else
+    mkdir -p "$(dirname "${dst_src}")"
+    cp "${src}" "${dst_src}"
+    local chk; chk=$(sha256_file "${dst_src}")
+    FILES_WRITTEN+=("{\"path\":\"${dst_src}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+  fi
+
+  # Claude Code vendor copy
   if hosts_include "claude-code"; then
-    # Claude Code: dir-per-skill, preserve full structure (SKILL.md + resources).
-    local dst_dir=".claude/skills/${skill_name}"
     if [[ "$DRY_RUN" == "true" ]]; then
-      echo "  [dry-run] copy ${src_dir}/ → ${dst_dir}/"
+      echo "  [dry-run] copy ${src} → ${dst_vendor}"
     else
-      rm -rf "$dst_dir"  # clean any stale symlink or prior copy
-      mkdir -p "$dst_dir"
-      cp -R "${src_dir}/." "${dst_dir}/"
-      local chk; chk=$(sha256_file "${dst_dir}/SKILL.md")
-      FILES_WRITTEN+=("{\"path\":\"${dst_dir}/SKILL.md\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+      mkdir -p "$(dirname "${dst_vendor}")"
+      cp "${src}" "${dst_vendor}"
+      local chk; chk=$(sha256_file "${dst_vendor}")
+      FILES_WRITTEN+=("{\"path\":\"${dst_vendor}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
     fi
   fi
 
+  # Copilot vendor copy (.github/instructions/<eidolon>-<skill>.instructions.md)
   if hosts_include "copilot"; then
-    # Copilot: .github/instructions/<name>.instructions.md with applyTo frontmatter.
-    local dst=".github/instructions/${skill_name}.instructions.md"
+    local dst_copilot=".github/instructions/${EIDOLON_SLUG}-${skill}.instructions.md"
     if [[ "$DRY_RUN" == "true" ]]; then
-      echo "  [dry-run] write ${dst}"
+      echo "  [dry-run] write ${dst_copilot}"
     else
       mkdir -p ".github/instructions"
       {
@@ -415,18 +432,18 @@ wire_skill() {
         echo "applyTo: \"**\""
         echo "description: \"${description}\""
         echo "---"
-        strip_frontmatter "$src_skill"
-      } > "$dst"
-      local chk; chk=$(sha256_file "$dst")
-      FILES_WRITTEN+=("{\"path\":\"${dst}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+        strip_frontmatter "$src"
+      } > "$dst_copilot"
+      local chk; chk=$(sha256_file "$dst_copilot")
+      FILES_WRITTEN+=("{\"path\":\"${dst_copilot}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
     fi
   fi
 
+  # Cursor vendor copy (.cursor/rules/<eidolon>-<skill>.mdc)
   if hosts_include "cursor"; then
-    # Cursor: .cursor/rules/<name>.mdc with MDC frontmatter.
-    local dst=".cursor/rules/${skill_name}.mdc"
+    local dst_cursor=".cursor/rules/${EIDOLON_SLUG}-${skill}.mdc"
     if [[ "$DRY_RUN" == "true" ]]; then
-      echo "  [dry-run] write ${dst}"
+      echo "  [dry-run] write ${dst_cursor}"
     else
       mkdir -p ".cursor/rules"
       {
@@ -434,20 +451,21 @@ wire_skill() {
         echo "description: \"${description}\""
         echo "alwaysApply: false"
         echo "---"
-        strip_frontmatter "$src_skill"
-      } > "$dst"
-      local chk; chk=$(sha256_file "$dst")
-      FILES_WRITTEN+=("{\"path\":\"${dst}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
+        strip_frontmatter "$src"
+      } > "$dst_cursor"
+      local chk; chk=$(sha256_file "$dst_cursor")
+      FILES_WRITTEN+=("{\"path\":\"${dst_cursor}\",\"sha256\":\"${chk}\",\"role\":\"skill\",\"mode\":\"created\"}")
     fi
   fi
 }
 
-# Emit per-skill files for every phase
+# Emit per-skill files for every phase (EIIS v1.3 §4.2.4 dual-write)
 if [[ "$MANIFEST_ONLY" != "true" ]]; then
   log "Wiring per-skill files across hosts"
-  for phase in traverse locate abstract synthesize; do
-    wire_skill "${SCRIPT_DIR}/skills/${phase}" "atlas-${phase}"
-  done
+  wire_skill "traverse"
+  wire_skill "locate"
+  wire_skill "abstract"
+  wire_skill "synthesize"
 fi
 
 # ---- claude-code (methodology-level subagent + optional shared dispatch) --- #
@@ -474,7 +492,7 @@ handoffs: [spectra, apivr]
 
 You execute the ATLAS methodology: **A**ssess → **T**raverse → **L**ocate →
 **A**bstract → **S**ynthesize. You are **read-only**. If asked to mutate
-anything, hand off. Full spec: \`${TARGET}/ATLAS.md\`.
+anything, hand off. Full spec: \`${TARGET}/SPEC.md\`.
 
 See \`${TARGET}/agent.md\` for the full P0 rules and progressive disclosure table."
 
@@ -525,8 +543,8 @@ permission:
 <!-- atlas-eiis-dispatch -->
 You are the ATLAS explorer/scout agent. Full rules: \`${TARGET}/AGENTS.md\`.
 Always-loaded profile: \`${TARGET}/agent.md\`.
-Phase skills: \`${TARGET}/skills/<phase>/SKILL.md\` — load only the active phase.
-Full spec: \`${TARGET}/ATLAS.md\`."
+Phase skills: \`${TARGET}/skills/<phase>.md\` — load only the active phase.
+Full spec: \`${TARGET}/SPEC.md\`."
 
   # .opencode/agents/atlas.md is owned by this Eidolon; overwrite on --force.
   if [[ ! -f ".opencode/agents/atlas.md" || "$FORCE" == "true" ]]; then
@@ -565,7 +583,7 @@ anything, hand off.
 
 Canonical methodology: \`${TARGET}/agent.md\` (always-loaded profile,
 <=1000 tokens). Full ruleset: \`${TARGET}/AGENTS.md\`. Full spec:
-\`${TARGET}/ATLAS.md\`.
+\`${TARGET}/SPEC.md\`.
 
 ## P0 (non-negotiable)
 
@@ -633,40 +651,41 @@ if [[ ${#FILES_WRITTEN[@]} -gt 0 ]]; then
   FILES_JSON="$(printf '%s,' "${FILES_WRITTEN[@]}" | sed 's/,$//')"
 fi
 
-ECL_FIELD=""
-if [[ -n "$ECL_VERSION_EMITTED" ]]; then
-  ECL_FIELD="
-  \"ecl_version_emitted\": \"${ECL_VERSION_EMITTED}\","
-fi
+# EIIS v1.3: spec_file field (canonical full-spec path)
+SPEC_FILE_PATH="${TARGET}/SPEC.md"
 
-MANIFEST_CONTENT="{
-  \"eidolon\": \"${EIDOLON_NAME}\",
-  \"version\": \"${EIDOLON_VERSION}\",
-  \"methodology\": \"${METHODOLOGY}\",
-  \"installed_at\": \"${INSTALLED_AT}\",
-  \"target\": \"${TARGET}\",
-  \"hosts_wired\": [${HOSTS_JSON}],
-  \"files_written\": [${FILES_JSON}],
-  \"handoffs_declared\": {
-    \"upstream\": [],
-    \"downstream\": [\"spectra\", \"apivr-delta\"]
-  },
-  \"token_budget\": {
-    \"entry\": ${AGENT_TOKENS},
-    \"working_set_target\": 1000
-  },${ECL_FIELD}
-  \"security\": {
-    \"reads_repo\": true,
-    \"reads_network\": false,
-    \"writes_repo\": false,
-    \"persists\": [\".atlas/.memex\"]
-  }
-}"
+# EIIS v1.3: skills array — build JSON for each skill's dual-write pair.
+# Source-of-truth SHA is computed from the installed flat file.
+build_skills_json() {
+  local result="" skill src_path vendor_path src_sha vendor_sha
+  for skill in traverse locate abstract synthesize; do
+    src_path="${TARGET}/skills/${skill}.md"
+    vendor_path=".claude/skills/${EIDOLON_SLUG}-${skill}/SKILL.md"
+    if [ -f "${src_path}" ]; then
+      src_sha="$(sha256_file "${src_path}")"
+    else
+      src_sha="0000000000000000000000000000000000000000000000000000000000000000"
+    fi
+    vendor_sha=""
+    if hosts_include "claude-code" && [ -f "${vendor_path}" ]; then
+      vendor_sha="$(sha256_file "${vendor_path}")"
+    fi
+    local entry
+    if [ -n "$vendor_sha" ]; then
+      entry="{\"name\":\"${skill}\",\"source_path\":\".eidolons/${EIDOLON_SLUG}/skills/${skill}.md\",\"source_sha256\":\"${src_sha}\",\"vendor_path\":\".claude/skills/${EIDOLON_SLUG}-${skill}/SKILL.md\",\"vendor_sha256\":\"${vendor_sha}\"}"
+    else
+      entry="{\"name\":\"${skill}\",\"source_path\":\".eidolons/${EIDOLON_SLUG}/skills/${skill}.md\",\"source_sha256\":\"${src_sha}\"}"
+    fi
+    result="${result:+${result},}${entry}"
+  done
+  printf '%s' "$result"
+}
 
 MANIFEST_PATH="${TARGET}/install.manifest.json"
-do_action "write ${MANIFEST_PATH}" bash -c "printf '%s\n' '${MANIFEST_CONTENT//\'/\'\\\'\'}' > '${MANIFEST_PATH}'"
 
 if [[ "$DRY_RUN" != "true" ]]; then
+  SKILLS_JSON="$(build_skills_json)"
+
   # Write cleanly without shell escaping issues.
   # ecl_version_emitted is injected only when ECL_VERSION is present (opt-in field).
   if [[ -n "$ECL_VERSION_EMITTED" ]]; then
@@ -677,8 +696,10 @@ if [[ "$DRY_RUN" != "true" ]]; then
   "methodology": "${METHODOLOGY}",
   "installed_at": "${INSTALLED_AT}",
   "target": "${TARGET}",
+  "spec_file": "${SPEC_FILE_PATH}",
   "hosts_wired": [${HOSTS_JSON}],
   "files_written": [${FILES_JSON}],
+  "skills": [${SKILLS_JSON}],
   "handoffs_declared": {
     "upstream": [],
     "downstream": ["spectra", "apivr-delta"]
@@ -704,8 +725,10 @@ MANIFEST_EOF
   "methodology": "${METHODOLOGY}",
   "installed_at": "${INSTALLED_AT}",
   "target": "${TARGET}",
+  "spec_file": "${SPEC_FILE_PATH}",
   "hosts_wired": [${HOSTS_JSON}],
   "files_written": [${FILES_JSON}],
+  "skills": [${SKILLS_JSON}],
   "handoffs_declared": {
     "upstream": [],
     "downstream": ["spectra", "apivr-delta"]
@@ -724,6 +747,8 @@ MANIFEST_EOF
 MANIFEST_EOF
   fi
   log "Manifest: ${MANIFEST_PATH}"
+else
+  do_action "write ${MANIFEST_PATH}" true
 fi
 
 # --------------------------------------------------------------------------- #

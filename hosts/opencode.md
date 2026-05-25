@@ -35,7 +35,7 @@ permission:
 You are the ATLAS explorer/scout agent. Full rules: `.eidolons/atlas/AGENTS.md`.
 Always-loaded profile: `.eidolons/atlas/agent.md`.
 Phase skills: `.eidolons/atlas/skills/<phase>/SKILL.md` — load only the active phase.
-Full spec: `.eidolons/atlas/ATLAS.md`.
+Full spec: `.eidolons/atlas/SPEC.md`.
 ```
 
 **Optional: phase subagents.** Create `.opencode/agents/atlas-traverse.md`:

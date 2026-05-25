@@ -24,7 +24,7 @@ description: ATLAS v1.0 — read-only codebase scout. Always applied. Refuses wr
 alwaysApply: true
 ---
 
-See `.eidolons/atlas/AGENTS.md` for the full rule set and `.eidolons/atlas/ATLAS.md` for the spec.
+See `.eidolons/atlas/AGENTS.md` for the full rule set and `.eidolons/atlas/SPEC.md` for the spec.
 
 Phases: A (Assess, inline) → T (Traverse, @atlas-traverse) → L (Locate, @atlas-locate) → A (Abstract, @atlas-abstract) → S (Synthesize, @atlas-synthesize)
 ```
