@@ -7,6 +7,38 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.7.0] — 2026-05-26 — EIIS v1.4 canonical inventory
+
+### Changed
+
+- Declares EIIS v1.4 conformance (`EIIS_VERSION = 1.4`).
+- **BREAKING (install-target):** `AGENTS.md` is no longer copied to
+  `<target>/`. The source-repo `AGENTS.md` at the ATLAS root is preserved per
+  EIIS §1.1; only the install-target copy is retired.
+- `agent.md` role in `files_written[]` changed from `"entry-point"` to
+  `"agent-profile"` (EIIS v1.4 §1.8.6).
+- `.claude/agents/atlas.md` heredoc rewritten per EIIS v1.4 §4.2.6: now
+  references both `agent.md` (P0 always-loaded rules) and `SPEC.md` (deep
+  on-demand methodology spec). Legacy `ATLAS.md` and `AGENTS.md` references
+  removed.
+- Non-whitelisted install-target directories (`evals/`, `.github/`,
+  `commands/`) are no longer created or populated under `<target>/`; these
+  artefacts live in the source repo only.
+
+### Added
+
+- `<target>/ECL_VERSION` is now written by `install.sh` with
+  `role: "ecl-version"` (EIIS v1.4 §3.7.1; closes scout G3). ATLAS source
+  declares `ECL_VERSION = 2.0`.
+- Manifest-driven canonical-inventory sweep (`canonical_inventory_sweep`
+  helper) runs after all writes and before manifest finalization (EIIS v1.4
+  §6.X). Belt-and-braces: `"AGENTS.md"` also added to `LEGACY_SPEC_FILES`
+  for early sweep on upgrade from v1.5.3.
+- Manifest now includes `"eiis_version": "1.4"` and
+  `"canonical_inventory_strict": true` (EIIS v1.4 §2.3).
+
+---
+
 ## [1.6.1] — 2026-05-26
 
 ### Fixed
