@@ -263,6 +263,9 @@ maybe_mkdir "${TARGET}/evals"
 maybe_mkdir "${TARGET}/.github"
 maybe_mkdir "${TARGET}/commands"
 
+# Sweep legacy v1.2-era artefacts before writing any new content.
+cleanup_legacy_v1_2 "${TARGET}"
+
 # --------------------------------------------------------------------------- #
 # Copy methodology files
 # --------------------------------------------------------------------------- #
