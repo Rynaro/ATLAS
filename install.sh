@@ -5,9 +5,20 @@ set -euo pipefail
 
 EIDOLON_NAME="atlas"
 EIDOLON_SLUG="atlas"
-EIDOLON_VERSION="1.6.0"
+EIDOLON_VERSION="1.6.1"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Legacy v1.2-era artefacts swept by cleanup_legacy_v1_2 on upgrade.
+# Basenames of spec files that lived at ${TARGET}/<name> in v1.2 installs.
+LEGACY_SPEC_FILES=( "ATLAS.md" )
+# Skill directory names that existed as ${TARGET}/skills/<name>/ subdirs in v1.2.
+LEGACY_SKILL_DIRS=( \
+  "abstract" \
+  "locate" \
+  "synthesize" \
+  "traverse" \
+)
 
 # ECL_VERSION — read from repo-root ECL_VERSION file if present.
 # The field is omitted from the manifest when the file is absent.
@@ -122,6 +133,46 @@ sha256_file() {
   fi
 }
 
+# cleanup_legacy_v1_2 <target>
+#
+# Sweep legacy v1.2-era artefacts left behind by prior installs.
+# Called exactly once, early in the install sequence, BEFORE any new content
+# is written under <target>. Idempotent: no-op when no legacy file exists.
+#
+# Reads two top-of-file arrays:
+#   LEGACY_SPEC_FILES  — basenames to rm -f at "<target>/<basename>"
+#   LEGACY_SKILL_DIRS  — skill names to rm -rf at "<target>/skills/<name>"
+#
+# Both arrays are declared per-Eidolon and MAY be empty (in which case
+# the corresponding loop is a no-op). Never reads/writes outside <target>.
+cleanup_legacy_v1_2() {
+  local target="$1"
+  local legacy
+  local legacy_skill_dir
+
+  if [ -z "${target}" ] || [ ! -d "${target}" ]; then
+    return 0
+  fi
+
+  # Sweep legacy spec filenames (e.g. ATLAS.md, apivr.md, ...)
+  for legacy in "${LEGACY_SPEC_FILES[@]}"; do
+    if [ -n "${legacy}" ] && [ -f "${target}/${legacy}" ]; then
+      rm -f "${target}/${legacy}"
+      warn "swept legacy spec file: ${target}/${legacy}"
+    fi
+  done
+
+  # Sweep legacy subdir-style skills (e.g. skills/traverse/SKILL.md)
+  for legacy_skill_dir in "${LEGACY_SKILL_DIRS[@]}"; do
+    if [ -n "${legacy_skill_dir}" ] && [ -d "${target}/skills/${legacy_skill_dir}" ]; then
+      rm -rf "${target}/skills/${legacy_skill_dir}"
+      warn "swept legacy skill subdir: ${target}/skills/${legacy_skill_dir}"
+    fi
+  done
+
+  return 0
+}
+
 # --------------------------------------------------------------------------- #
 # Host detection
 # --------------------------------------------------------------------------- #
@@ -211,6 +262,9 @@ maybe_mkdir "${TARGET}/schemas"
 maybe_mkdir "${TARGET}/evals"
 maybe_mkdir "${TARGET}/.github"
 maybe_mkdir "${TARGET}/commands"
+
+# Sweep legacy v1.2-era artefacts before writing any new content.
+cleanup_legacy_v1_2 "${TARGET}"
 
 # --------------------------------------------------------------------------- #
 # Copy methodology files
