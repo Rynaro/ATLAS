@@ -215,7 +215,7 @@ consume.
 **Outputs.**
 
 - `scout-report.md` (see `templates/scout-report.md`) — primary structured report.
-- `scout-report.envelope.json` (see `templates/scout-report.envelope.json`) — ECL v1.0 envelope sidecar, emitted adjacent to the scout report. Schema: `schemas/ecl-envelope.v1.json` + `schemas/scout-report-profile.v1.json`.
+- `scout-report.envelope.json` (see `schemas/scout-report.envelope.json`) — ECL v1.0 envelope sidecar, emitted adjacent to the scout report. Schema: `schemas/ecl-envelope.v1.json` + `schemas/scout-report-profile.v1.json`.
 
 The envelope sidecar is a **terminal Phase-S artefact** in the same class as `scout-report.md` itself. It is NOT a tool call. Emitting it does not violate the I-1 read-only invariant.
 

@@ -7,6 +7,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.7.1] — 2026-05-26 — SPEC.md text sweep
+
+### Fixed
+
+- fix: SPEC.md text references updated to match canonical v1.4 layout (envelope.json relocated to schemas/).
+
+---
+
 ## [1.7.0] — 2026-05-26 — EIIS v1.4 canonical inventory
 
 ### Changed
