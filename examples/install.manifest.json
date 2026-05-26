@@ -1,6 +1,6 @@
 {
   "eidolon": "atlas",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "methodology": "ATLAS",
   "installed_at": "2026-05-25T00:00:00Z",
   "target": "./.eidolons/atlas",

@@ -7,6 +7,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.6.1] — 2026-05-26
+
+### Fixed
+
+- `install.sh` now sweeps legacy v1.2-era artefacts on upgrade: removes stale
+  `<TARGET>/ATLAS.md` and any `<TARGET>/skills/{abstract,locate,synthesize,traverse}/`
+  subdir trees left behind by pre-v1.3 installs. Fresh installs are unaffected.
+
+---
+
 ## [1.6.0] — 2026-05-25 — EIIS v1.3 install layout normalization
 
 ### Changed
