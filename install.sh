@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# ATLAS installer — EIIS v1.3 conformant
+# ATLAS installer — EIIS v1.4 conformant
 # Usage: bash install.sh [OPTIONS]
 set -euo pipefail
 
 EIDOLON_NAME="atlas"
 EIDOLON_SLUG="atlas"
-EIDOLON_VERSION="1.6.1"
+EIDOLON_VERSION="1.7.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Legacy v1.2-era artefacts swept by cleanup_legacy_v1_2 on upgrade.
-# Basenames of spec files that lived at ${TARGET}/<name> in v1.2 installs.
-LEGACY_SPEC_FILES=( "ATLAS.md" )
+# Legacy artefacts swept by cleanup_legacy_v1_2 on upgrade (belt-and-braces,
+# in addition to the manifest-driven canonical_inventory_sweep at install-end).
+# Basenames of spec/doc files that lived at ${TARGET}/<name> in prior installs.
+LEGACY_SPEC_FILES=( "ATLAS.md" "AGENTS.md" )
 # Skill directory names that existed as ${TARGET}/skills/<name>/ subdirs in v1.2.
 LEGACY_SKILL_DIRS=( \
   "abstract" \
@@ -173,6 +174,67 @@ cleanup_legacy_v1_2() {
   return 0
 }
 
+# canonical_inventory_sweep <target>
+#
+# EIIS v1.4 §6.X — manifest-driven install-target cleanup.
+# Called AFTER all writes are complete (but before the manifest is finalised).
+# Removes any file under <target>/ that is NOT in the current run's
+# FILES_WRITTEN array (i.e. not whitelisted by the write pass). Also prunes
+# empty directories. Idempotent: safe to call on fresh or upgrade installs.
+# Bash 3.2 compatible (no associative arrays; uses string-search).
+canonical_inventory_sweep() {
+  local target="$1"
+
+  if [ -z "${target}" ] || [ ! -d "${target}" ]; then
+    return 0
+  fi
+
+  # Build a newline-delimited list of allowed absolute paths from FILES_WRITTEN.
+  local allowed=""
+  local entry path_raw abs_path
+  for entry in "${FILES_WRITTEN[@]+"${FILES_WRITTEN[@]}"}"; do
+    # Extract the "path":"..." value from the JSON object string.
+    path_raw="$(printf '%s' "$entry" | grep -o '"path":"[^"]*"' | head -n1 | sed 's/"path":"//;s/"//')"
+    if [ -n "$path_raw" ]; then
+      # Resolve to absolute path (strip leading ./ if present).
+      abs_path="${path_raw#./}"
+      # Keep only paths that are under the target directory.
+      case "$abs_path" in
+        "${target#./}/"*|"${target}/"*)
+          allowed="${allowed}${path_raw}"$'\n'
+          ;;
+      esac
+    fi
+  done
+
+  # Walk every file under target; remove anything not in allowed set.
+  while IFS= read -r disk_file; do
+    [ -z "$disk_file" ] && continue
+    local found=0
+    local a
+    while IFS= read -r a; do
+      [ -z "$a" ] && continue
+      local abs_a="${a#./}"
+      local abs_d="${disk_file#./}"
+      if [ "$abs_a" = "$abs_d" ]; then
+        found=1
+        break
+      fi
+    done <<EOF_ALLOWED
+$allowed
+EOF_ALLOWED
+    if [ "$found" -eq 0 ]; then
+      rm -f "$disk_file"
+      warn "canonical_inventory_sweep: removed non-whitelisted file: ${disk_file}"
+    fi
+  done < <(find "${target}" -type f 2>/dev/null)
+
+  # Prune empty directories (safe; never touches parent of <target>).
+  find "${target}" -type d -empty -delete 2>/dev/null || true
+
+  return 0
+}
+
 # --------------------------------------------------------------------------- #
 # Host detection
 # --------------------------------------------------------------------------- #
@@ -259,11 +321,8 @@ maybe_mkdir "${TARGET}"
 maybe_mkdir "${TARGET}/skills"
 maybe_mkdir "${TARGET}/templates"
 maybe_mkdir "${TARGET}/schemas"
-maybe_mkdir "${TARGET}/evals"
-maybe_mkdir "${TARGET}/.github"
-maybe_mkdir "${TARGET}/commands"
 
-# Sweep legacy v1.2-era artefacts before writing any new content.
+# Sweep legacy artefacts before writing any new content.
 cleanup_legacy_v1_2 "${TARGET}"
 
 # --------------------------------------------------------------------------- #
@@ -279,30 +338,26 @@ copy_file() {
 }
 
 if [[ "$MANIFEST_ONLY" != "true" ]]; then
-  copy_file "agent.md"                                  "${TARGET}/agent.md"                          "entry-point"
+  # D1: agent.md (role: agent-profile) and SPEC.md (role: spec) — EIIS v1.4 §1.8.6
+  copy_file "agent.md"                                  "${TARGET}/agent.md"                          "agent-profile"
   copy_file "SPEC.md"                                   "${TARGET}/SPEC.md"                           "spec"
-  copy_file "AGENTS.md"                                 "${TARGET}/AGENTS.md"                         "entry-point"
+  # D3: ECL_VERSION install-target copy — EIIS v1.4 §3.7.1
+  if [[ -f "${SCRIPT_DIR}/ECL_VERSION" ]]; then
+    copy_file "ECL_VERSION"                             "${TARGET}/ECL_VERSION"                       "ecl-version"
+  fi
   copy_file "templates/mission-brief.md"                "${TARGET}/templates/mission-brief.md"        "template"
   copy_file "templates/traversal-map.md"                "${TARGET}/templates/traversal-map.md"        "template"
   copy_file "templates/findings.md"                     "${TARGET}/templates/findings.md"             "template"
   copy_file "templates/scout-report.md"                 "${TARGET}/templates/scout-report.md"         "template"
-  copy_file "schemas/mission-brief.v1.json"             "${TARGET}/schemas/mission-brief.v1.json"              "other"
-  copy_file "schemas/findings.v1.json"                  "${TARGET}/schemas/findings.v1.json"                 "other"
-  copy_file "schemas/scout-report.v1.json"              "${TARGET}/schemas/scout-report.v1.json"             "other"
-  copy_file "schemas/install.manifest.v1.json"          "${TARGET}/schemas/install.manifest.v1.json"         "other"
-  copy_file "schemas/scout-report-profile.v1.json"      "${TARGET}/schemas/scout-report-profile.v1.json"     "other"
-  copy_file "schemas/ecl-envelope.v1.json"              "${TARGET}/schemas/ecl-envelope.v1.json"             "other"
-  copy_file "templates/scout-report.envelope.json"      "${TARGET}/templates/scout-report.envelope.json"     "template"
-  copy_file "evals/canary-missions.md"                  "${TARGET}/evals/canary-missions.md"          "other"
-  copy_file ".github/copilot-instructions.md"           "${TARGET}/.github/copilot-instructions.md"   "dispatch"
-  # Eidolons-nexus subcommands shipped by ATLAS. Auto-surfaced by the
-  # nexus dispatcher (cli/src/dispatch_eidolon.sh) as
-  # `eidolons atlas <name> [...]` once installed under .eidolons/atlas/commands/.
-  copy_file "commands/aci.sh"                           "${TARGET}/commands/aci.sh"                   "other"
-  # Preserve the executable bit so the dispatcher can exec it directly.
-  if [[ "$DRY_RUN" != "true" ]]; then
-    chmod +x "${TARGET}/commands/aci.sh"
-  fi
+  copy_file "schemas/mission-brief.v1.json"             "${TARGET}/schemas/mission-brief.v1.json"     "other"
+  copy_file "schemas/findings.v1.json"                  "${TARGET}/schemas/findings.v1.json"          "other"
+  copy_file "schemas/scout-report.v1.json"              "${TARGET}/schemas/scout-report.v1.json"      "other"
+  copy_file "schemas/install.manifest.v1.json"          "${TARGET}/schemas/install.manifest.v1.json"  "other"
+  copy_file "schemas/scout-report-profile.v1.json"      "${TARGET}/schemas/scout-report-profile.v1.json" "other"
+  copy_file "schemas/ecl-envelope.v1.json"              "${TARGET}/schemas/ecl-envelope.v1.json"      "other"
+  # ECL envelope template — stored under schemas/ (§1.7.2: MAY vendor additional
+  # JSON schemas; templates/ only allows .md per §1.7.1 whitelist).
+  copy_file "templates/scout-report.envelope.json"      "${TARGET}/schemas/scout-report.envelope.json"   "other"
 fi
 
 # --------------------------------------------------------------------------- #
@@ -542,13 +597,12 @@ role: Explorer/Scout — read-only codebase intelligence
 handoffs: [spectra, apivr]
 ---
 
-# ATLAS — Explorer/Scout Agent
+You are ATLAS. Read these two files in order at session start:
 
-You execute the ATLAS methodology: **A**ssess → **T**raverse → **L**ocate →
-**A**bstract → **S**ynthesize. You are **read-only**. If asked to mutate
-anything, hand off. Full spec: \`${TARGET}/SPEC.md\`.
+1. \`./.eidolons/atlas/agent.md\` — always-loaded P0 rules.
+2. \`./.eidolons/atlas/SPEC.md\` — deep on-demand methodology spec.
 
-See \`${TARGET}/agent.md\` for the full P0 rules and progressive disclosure table."
+Skills live at \`./.eidolons/atlas/skills/<skill>.md\` (load on demand)."
 
   if [[ "$DRY_RUN" != "true" ]]; then
     printf "%s\n" "$AGENT_CONTENT" > ".claude/agents/atlas.md"
@@ -595,10 +649,10 @@ permission:
 ---
 
 <!-- atlas-eiis-dispatch -->
-You are the ATLAS explorer/scout agent. Full rules: \`${TARGET}/AGENTS.md\`.
+You are the ATLAS explorer/scout agent.
 Always-loaded profile: \`${TARGET}/agent.md\`.
-Phase skills: \`${TARGET}/skills/<phase>.md\` — load only the active phase.
-Full spec: \`${TARGET}/SPEC.md\`."
+Full spec: \`${TARGET}/SPEC.md\`.
+Phase skills: \`${TARGET}/skills/<phase>.md\` — load only the active phase."
 
   # .opencode/agents/atlas.md is owned by this Eidolon; overwrite on --force.
   if [[ ! -f ".opencode/agents/atlas.md" || "$FORCE" == "true" ]]; then
@@ -636,8 +690,7 @@ You execute the ATLAS methodology: **A**ssess -> **T**raverse -> **L**ocate ->
 anything, hand off.
 
 Canonical methodology: \`${TARGET}/agent.md\` (always-loaded profile,
-<=1000 tokens). Full ruleset: \`${TARGET}/AGENTS.md\`. Full spec:
-\`${TARGET}/SPEC.md\`.
+<=1000 tokens). Full spec: \`${TARGET}/SPEC.md\`.
 
 ## P0 (non-negotiable)
 
@@ -692,6 +745,16 @@ if [[ "$AGENT_TOKENS" -gt 1000 ]]; then
     echo "Error: agent.md token budget exceeded in --non-interactive mode." >&2
     exit 4
   fi
+fi
+
+# --------------------------------------------------------------------------- #
+# EIIS v1.4 §6.X — manifest-driven canonical inventory sweep
+# Remove any file under TARGET that is not in FILES_WRITTEN (i.e. not
+# whitelisted by the current write pass). Runs AFTER all writes, BEFORE
+# the manifest is finalised. Idempotent.
+# --------------------------------------------------------------------------- #
+if [[ "$DRY_RUN" != "true" && "$MANIFEST_ONLY" != "true" ]]; then
+  canonical_inventory_sweep "${TARGET}"
 fi
 
 # --------------------------------------------------------------------------- #
@@ -751,6 +814,7 @@ if [[ "$DRY_RUN" != "true" ]]; then
   "eidolon": "${EIDOLON_NAME}",
   "version": "${EIDOLON_VERSION}",
   "methodology": "${METHODOLOGY}",
+  "canonical_inventory_strict": true,
   "installed_at": "${INSTALLED_AT}",
   "target": "${TARGET}",
   "spec_file": "${SPEC_FILE_PATH}",
@@ -780,6 +844,7 @@ MANIFEST_EOF
   "eidolon": "${EIDOLON_NAME}",
   "version": "${EIDOLON_VERSION}",
   "methodology": "${METHODOLOGY}",
+  "canonical_inventory_strict": true,
   "installed_at": "${INSTALLED_AT}",
   "target": "${TARGET}",
   "spec_file": "${SPEC_FILE_PATH}",
