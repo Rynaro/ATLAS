@@ -97,13 +97,12 @@ phase: T | tokens_in: 4231 | tokens_out: 812 | tool_calls: 14 | fold_ratio: 0.18
 To wire the atlas-aci MCP server into your project, run one of:
 
 ```sh
-# uv mode (default — needs python3>=3.11 + uv + ripgrep)
-eidolons atlas aci --install
+# host mode (default — needs python3>=3.11 + uv + ripgrep)
+eidolons atlas aci wire
 
 # container mode (needs docker or podman — no Python toolchain required)
-eidolons atlas aci --container --install
-eidolons atlas aci --container --runtime docker --install   # skip prompt
-eidolons atlas aci --container --runtime podman --non-interactive --install  # CI
+eidolons atlas aci wire docker                                # docker
+eidolons atlas aci wire podman --non-interactive             # podman, CI
 ```
 
 Both modes are idempotent. A second run with the same image digest is a no-op.

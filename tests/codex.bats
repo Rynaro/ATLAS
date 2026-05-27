@@ -94,7 +94,7 @@ assert_codex_table_absent() {
   setup_stubs
   seed_codex_host
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
 
   assert_codex_table_present ".codex/config.toml"
@@ -107,12 +107,12 @@ assert_codex_table_absent() {
   setup_stubs
   seed_codex_host
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
   local first
   first="$(sha256_file ".codex/config.toml")"
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
   local second
   second="$(sha256_file ".codex/config.toml")"
@@ -177,7 +177,7 @@ EOF
   local before_peer
   before_peer="$(cat ".codex/config.toml")"
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
   assert_codex_table_present ".codex/config.toml"
 
@@ -206,7 +206,7 @@ EOF
   seed_codex_host
   uninstall_stub "awk"
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 5 ]
   [[ "$output" == *"awk"* ]]
   [ ! -f ".codex/config.toml" ]
@@ -219,7 +219,7 @@ EOF
   setup_stubs
   seed_codex_host
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
   local baseline
   baseline="$(sha256_file ".codex/config.toml")"
@@ -228,7 +228,7 @@ EOF
   [ "$status" -eq 0 ]
   assert_codex_table_absent ".codex/config.toml"
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
   local rebuilt
   rebuilt="$(sha256_file ".codex/config.toml")"
@@ -255,7 +255,7 @@ EOF
     > ".codex/config.toml"
 
   # install should detect the table is canonical (modulo CRLF) and skip.
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
 
   # remove should strip our table, leaving the peer.
@@ -281,7 +281,7 @@ EOF
   # Write a file without a trailing newline.
   printf '[settings]\ntheme = "dark"' > ".codex/config.toml"
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
 
   # Our table should now be appended correctly.
@@ -374,7 +374,7 @@ args = ["serve", "--repo", "/custom/path"]
 env = {CUSTOM_VAR = "1"}
 EOF
 
-  run_aci --install --host codex --non-interactive
+  run_aci wire --host codex --non-interactive
   [ "$status" -eq 0 ]
 
   # Output (stderr) must contain the refusal warning.
@@ -399,7 +399,7 @@ EOF
   setup_stubs
   seed_codex_host
 
-  run_aci --install --host codex --dry-run --non-interactive
+  run_aci wire --host codex --dry-run --non-interactive
   [ "$status" -eq 0 ]
 
   [[ "$output" == *"CREATE"*".codex/config.toml"* ]] || {
@@ -425,7 +425,7 @@ EOF
   mkdir -p .codex
   printf '[settings]\ntheme = "dark"\n' > ".codex/config.toml"
 
-  run_aci --install --host codex --dry-run --non-interactive
+  run_aci wire --host codex --dry-run --non-interactive
   [ "$status" -eq 0 ]
 
   [[ "$output" == *"MODIFY"*".codex/config.toml"* ]] || {

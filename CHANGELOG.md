@@ -7,6 +7,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.8.0] - 2026-05-27
+
+### Breaking
+- `atlas aci install` renamed to `atlas aci wire` (no alias; hard rename). Using `install` as the positional action or `--install` as a flag now exits 2 with a migration hint.
+- `--container` and `--runtime` flags removed; runtime is now a positional after the action: `atlas aci wire [docker|podman]`. Absent = host mode.
+
+### Fixed
+- `atlas aci index` now detects digest-pulled images via `docker image inspect @sha256:...`; the stale `ATLAS_VERSION` constant (was hard-coded `1.4.2`) is now substituted from `install.sh`'s `EIDOLON_VERSION` at install time, eliminating the "stale constant" class of bug.
+- Exit-5 error text for `atlas aci index` distinguishes "no image anywhere" from "image present but version mismatch" and no longer tells users to "re-run install".
+
+---
+
 ## [1.7.2] — 2026-05-27 — Canary DSL migration
 
 ### Changed
