@@ -22,15 +22,15 @@
 #       .mcp.json / .cursor/mcp.json : jq merge on mcpServers."atlas-aci"
 #       .github/agents/*.agent.md    : yq merge on list entry name: atlas-aci
 #       .gitignore                   : append-if-absent on line '.atlas/'
-#   - All progress to stderr (P6). Stdout stays empty on --install /
-#     --remove success; dry-run stdout emits CREATE|MODIFY|REMOVE|INDEX|BUILD.
+#   - All progress to stderr (P6). Stdout stays empty on wire /
+#     remove success; dry-run stdout emits CREATE|MODIFY|REMOVE|INDEX|BUILD.
 #   - Bash 3.2 compatible (P5): no associative arrays, no ${var,,},
 #     no readarray/mapfile, no &>>. Atomic tmpfile + mv everywhere.
 #   - TOML idempotency (codex host): awk slices on [mcp_servers.atlas-aci]
 #     heading, line-bounded by next [*] heading or EOF. Atomic tmpfile+mv.
 #     On detect of a deviant existing body, warn + refuse (R2 mitigation).
-#   - Container mode (--container): builds atlas-aci image locally from git
-#     URL, pins by local sha256 digest, idempotent across repeated runs.
+#   - Container mode (positional runtime after action): builds atlas-aci image
+#     locally from git URL, pins by sha256 digest, idempotent across runs.
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -66,8 +66,9 @@ ATLAS_ACI_IMAGE_REF="ghcr.io/rynaro/atlas-aci"
 ATLAS_ACI_IMAGE_DIGEST="sha256:386677f06b0ce23cb4883f6c0f91d8eac22328cd7d9451ae241e2f183207ad96"
 
 # ATLAS version — used as the local image tag (atlas-aci:<ATLAS_VERSION>).
-# Kept in sync with install.sh EIDOLON_VERSION.
-ATLAS_VERSION="1.4.2"
+# Substituted from install.sh EIDOLON_VERSION at install time via sed.
+# DO NOT edit manually — the placeholder is replaced during `bash install.sh`.
+ATLAS_VERSION="__ATLAS_VERSION__"
 
 # ─── Logging (mirrors cli/src/lib.sh — P6: everything to stderr) ──────────
 # Kept local so this script is self-sufficient when the dispatcher exec's
@@ -96,44 +97,39 @@ exit_need_rt()   { err "$*"; exit 9; }  # --non-interactive without --runtime
 die()            { err "$*"; exit 1; }  # unexpected runtime error
 
 # ─── Args ─────────────────────────────────────────────────────────────────
-ACTION="install"       # install | remove | index
+ACTION="wire"          # wire | remove | index
 DRY_RUN=false
 NON_INTERACTIVE=false
 HOSTS_EXPLICIT=""      # CSV of user-specified hosts
-CONTAINER_MODE=false   # --container flag
-RUNTIME=""             # --runtime docker|podman (empty = prompt)
+RUNTIME_POSITIONAL=""  # positional: docker | podman (absent = host mode)
+# CONTAINER_MODE and RUNTIME are derived below from RUNTIME_POSITIONAL
+CONTAINER_MODE=false
+RUNTIME=""
 
 usage() {
   cat <<'EOF'
 eidolons atlas aci — wire atlas-aci MCP server into this project
 
-Usage: eidolons atlas aci [ACTION] [OPTIONS]
+Usage: eidolons atlas aci [ACTION] [runtime] [OPTIONS]
 
-Actions (positional, mutually exclusive — flag forms also accepted):
-  install   (default) Verify prereqs, run atlas-aci index, append .atlas/
+Actions (positional, mutually exclusive):
+  wire      (default) Verify prereqs, run atlas-aci index, append .atlas/
             to .gitignore, and write MCP config for atlas-aci into every
             detected MCP-capable host in cwd.
   index     Re-run atlas-aci index against the current project. Reuses
             the existing installation — does NOT rebuild the image, does
             NOT modify MCP configs or .gitignore. Mode (host vs
-            container) is auto-detected from what's installed locally;
-            override with --container / --runtime.
+            container) is auto-detected from what's installed locally.
   remove    Remove atlas-aci entries from MCP config in cwd. Idempotent.
             Does NOT delete .atlas/.
 
+Runtime (optional positional after ACTION):
+  docker    Use docker for container mode.
+  podman    Use podman for container mode.
+  (absent)  Host mode — use atlas-aci binary directly (no container).
+
 Options:
-  --install / --index / --remove
-                         Flag forms of the actions above.
-  --container            Use container-runtime mode: build the atlas-aci
-                         image locally (docker/podman) and write container-
-                         aware MCP config. Implies a local image build on
-                         first run; subsequent runs are no-ops when the
-                         image digest is unchanged. With `index`, only
-                         forces container as the index runtime — no build.
-  --runtime docker|podman
-                         Force container runtime (skips interactive prompt).
-                         Required in --non-interactive mode when --container
-                         is set.
+  --index / --remove     Flag forms of the index/remove actions.
   --host HOST            Restrict to one host: claude-code, cursor,
                          copilot, codex. Repeat for multiple. Overrides
                          auto-detection. Ignored by `index`.
@@ -151,9 +147,8 @@ Exit codes:
   5  atlas-aci prereq missing (uv, rg, python3>=3.11, atlas-aci binary,
      or — for `index` auto-detect — neither host nor container present)
   6  atlas-aci index failed
-  7  container runtime not on PATH (--container only)
-  8  image build failed (--container only)
-  9  --non-interactive without --runtime in --container mode
+  7  requested container runtime not on PATH
+  8  image build failed (container mode only)
   1  unexpected runtime error
 
 Scope: project-local files only. Never writes outside $PWD.
@@ -176,22 +171,43 @@ _add_host() {
 }
 
 # Positional action subcommand: peek $1 before the flag loop.
-# Allows `eidolons atlas aci index` / `... install` / `... remove`.
-# A trailing flag form (--index/--install/--remove) is still accepted
-# below; conflicts between positional and flag are caught by the same
-# _action_seen guard.
+# Allows `eidolons atlas aci wire` / `... index` / `... remove`.
+# The legacy `install` positional is a hard usage error (renamed v1.8.0).
+_runtime_seen=false
 case "${1:-}" in
-  install|index|remove)
+  install)
+    err "Unknown action: install (did you mean 'wire'? — renamed in ATLAS v1.8.0; see CHANGELOG)"
+    exit 2 ;;
+  wire|index|remove)
     ACTION="$1"; _action_seen=true; shift ;;
 esac
+
+# Optional runtime positional (docker|podman) immediately after the action.
+if [ "$_action_seen" = "true" ] && [ "$_runtime_seen" = "false" ] && [ "$#" -gt 0 ]; then
+  case "${1:-}" in
+    docker|podman)
+      RUNTIME_POSITIONAL="$1"; _runtime_seen=true; shift ;;
+    --*)
+      # Next token is a flag — no runtime positional given.
+      ;;
+    *)
+      # Non-flag, non-runtime token — hard usage error.
+      err "Unknown runtime: $1 (allowed: docker, podman; omit for host mode)"
+      exit 2 ;;
+  esac
+fi
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --install)
-      if [ "$_action_seen" = "true" ] && [ "$ACTION" != "install" ]; then
-        exit_usage "Conflicting actions: --install and $ACTION"
-      fi
-      ACTION="install"; _action_seen=true; shift ;;
+      err "Unknown option: --install (did you mean 'wire'? — flag form removed in ATLAS v1.8.0)"
+      exit 2 ;;
+    --container)
+      err "Unknown option: --container"
+      exit 2 ;;
+    --runtime|--runtime=*)
+      err "Unknown option: --runtime"
+      exit 2 ;;
     --index)
       if [ "$_action_seen" = "true" ] && [ "$ACTION" != "index" ]; then
         exit_usage "Conflicting actions: --index and $ACTION"
@@ -202,22 +218,6 @@ while [ "$#" -gt 0 ]; do
         exit_usage "Conflicting actions: --remove and $ACTION"
       fi
       ACTION="remove"; _action_seen=true; shift ;;
-    --container)    CONTAINER_MODE=true; shift ;;
-    --runtime)
-      [ "$#" -ge 2 ] || exit_usage "--runtime requires a value (docker|podman)"
-      case "$2" in
-        docker|podman) RUNTIME="$2" ;;
-        *) exit_usage "--runtime value must be 'docker' or 'podman' (got: $2)" ;;
-      esac
-      CONTAINER_MODE=true
-      shift 2 ;;
-    --runtime=*)
-      case "${1#--runtime=}" in
-        docker|podman) RUNTIME="${1#--runtime=}" ;;
-        *) exit_usage "--runtime value must be 'docker' or 'podman' (got: ${1#--runtime=})" ;;
-      esac
-      CONTAINER_MODE=true
-      shift ;;
     --dry-run)         DRY_RUN=true; shift ;;
     --non-interactive) NON_INTERACTIVE=true; shift ;;
     --host)
@@ -229,6 +229,12 @@ while [ "$#" -gt 0 ]; do
     *) exit_usage "Unknown option: $1" ;;
   esac
 done
+
+# Derive CONTAINER_MODE and RUNTIME from the positional.
+if [ -n "$RUNTIME_POSITIONAL" ]; then
+  CONTAINER_MODE=true
+  RUNTIME="$RUNTIME_POSITIONAL"
+fi
 
 # ─── Early awk guard (before any awk call in the script body) ─────────────
 # awk is a POSIX baseline but guard defensively so the user gets exit 5
@@ -356,63 +362,23 @@ check_prereqs_container() {
            or:  apt-get install git # Debian/Ubuntu"
   fi
 
-  # Runtime resolution: if --runtime was given, verify it's on PATH.
-  # If not given, we handle it at runtime-selection time (see
-  # select_runtime). Here we only check "is at least one available?"
-  if [ -n "$RUNTIME" ]; then
-    if ! command -v "$RUNTIME" >/dev/null 2>&1; then
-      exit_no_runtime "atlas-aci container mode: '$RUNTIME' not on PATH.
-  Install Docker Desktop: https://docs.docker.com/desktop/
-  Install Podman:         https://podman.io/getting-started/installation"
-    fi
-  else
-    # At least one runtime must be available.
-    local _has_docker=false _has_podman=false
-    command -v docker >/dev/null 2>&1 && _has_docker=true
-    command -v podman >/dev/null 2>&1 && _has_podman=true
-    if [ "$_has_docker" = "false" ] && [ "$_has_podman" = "false" ]; then
-      exit_no_runtime "atlas-aci container mode: neither 'docker' nor 'podman' found on PATH.
-  Install Docker Desktop: https://docs.docker.com/desktop/
-  Install Podman:         https://podman.io/getting-started/installation"
-    fi
+  # RUNTIME is always set from the positional (RUNTIME_POSITIONAL) before
+  # check_prereqs_container is called. Verify it's on PATH.
+  if ! command -v "$RUNTIME" >/dev/null 2>&1; then
+    err "atlas-aci: requested runtime '$RUNTIME' is not on PATH. Install it or omit the positional to use host mode."
+    exit 7
   fi
 }
 
-# ─── Runtime selection (D1 = always-prompt) ───────────────────────────────
-# Called after check_prereqs_container when RUNTIME is still empty.
-# Writes the chosen runtime into RUNTIME (global).
+# ─── Runtime selection ────────────────────────────────────────────────────
+# RUNTIME is always set from the positional before select_runtime is called
+# in container mode. This function is now a no-op guard.
 select_runtime() {
-  # If already set by --runtime, nothing to do.
+  # RUNTIME was set from the positional — nothing to do.
   [ -n "$RUNTIME" ] && return 0
-
-  # Non-interactive without --runtime → exit 9 (D1 contract).
-  if [ "$NON_INTERACTIVE" = "true" ]; then
-    exit_need_rt "atlas-aci: --container in --non-interactive mode requires --runtime <docker|podman>.
-  Example: eidolons atlas aci --container --runtime docker --non-interactive"
-  fi
-
-  # Interactive prompt — max 3 tries.
-  local _tries=0
-  while [ "$_tries" -lt 3 ]; do
-    printf "Choose container runtime: [1] docker  [2] podman  > " >&2
-    local _choice
-    # read from /dev/tty so we work even when stdin is redirected in some
-    # shell wrappers — but fall back to plain read for portability.
-    if [ -t 0 ]; then
-      read -r _choice
-    else
-      read -r _choice </dev/tty
-    fi
-    case "$_choice" in
-      1|docker) RUNTIME="docker"; return 0 ;;
-      2|podman) RUNTIME="podman"; return 0 ;;
-      *)
-        warn "Invalid choice '$_choice'. Enter 1 (docker) or 2 (podman)."
-        _tries=$((_tries + 1))
-        ;;
-    esac
-  done
-  exit_need_rt "atlas-aci: runtime selection failed after 3 attempts. Pass --runtime <docker|podman>."
+  # Should never reach here in container mode (RUNTIME_POSITIONAL is
+  # validated at parse time); guard defensively.
+  exit_no_runtime "atlas-aci: container mode requires a runtime positional (docker or podman)."
 }
 
 # ─── Container image management ───────────────────────────────────────────
@@ -588,7 +554,7 @@ container_json_fragment() {
   # workspaceFolder" warning, after which the docker `-v` mount
   # dereferences the literal string and fails. Absolute paths are
   # unambiguous across hosts; the trade-off is per-machine .mcp.json
-  # bodies (re-run `eidolons atlas aci install` after relocating).
+  # bodies (re-run `eidolons atlas aci wire` after relocating).
   # -u UID:GID baked at install time so the serve container writes
   # .atlas/ files with host user ownership (atlas-aci-container-uid-perm-fix).
   # :Z appended to binds when SELinux Enforcing (private MCS relabel).
@@ -1491,7 +1457,7 @@ unwire_codex() {
 # Canonical tool lists are kept here (and not in install.sh) so the
 # install→aci-install→aci-remove cycle is symmetric:
 #   - install.sh writes the BASE list.
-#   - aci install extends it to the WITH-MCP list.
+#   - aci wire extends it to the WITH-MCP list.
 #   - aci remove restores BASE.
 # If install.sh's list ever changes, _subagent_canonical_tools_base
 # below must follow.
@@ -1668,37 +1634,61 @@ _container_configs_up_to_date() {
 # ─── `index` action: re-run atlas-aci index against the current project ──
 # Reuses the existing installation — does NOT rebuild the image, does NOT
 # touch MCP configs or .gitignore. Mode (host vs container) is auto-
-# detected from what's installed locally; --container forces container.
+# detected from what's installed locally; positional [runtime] forces it.
 #
-# Auto-detect order (when --container is not set):
+# Auto-detect order (when no runtime positional is given):
 #   1. command -v atlas-aci → host mode (simpler, faster, no daemon)
-#   2. atlas-aci:<ATLAS_VERSION> image present in docker → container/docker
-#   3. ditto in podman → container/podman
-#   4. neither → exit 5 with hint to run --install first
+#   2. Digest-first: docker image inspect @sha256:... (P3 — no tag needed)
+#   3. Ditto podman
+#   4. Tag fallback: docker/podman images grep for atlas-aci:<ATLAS_VERSION>
+#      (covers self-built images with a version tag)
+#   5. Stale-tag probe: any older tag → distinguished exit-5 mismatch message
+#   6. Neither → exit 5 with clear "no installation detected" message
 detect_index_mode() {
+  local _digest_ref
+  _digest_ref="${ATLAS_ACI_IMAGE_REF}@${ATLAS_ACI_IMAGE_DIGEST}"
+
   if [ "$CONTAINER_MODE" = "true" ]; then
-    # User forced container; only auto-pick runtime if missing.
-    if [ -z "$RUNTIME" ]; then
-      for rt in docker podman; do
-        if command -v "$rt" >/dev/null 2>&1; then
-          if "$rt" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
-               | grep -q "^$(image_tag)$"; then
-            RUNTIME="$rt"
-            return 0
-          fi
-        fi
-      done
-      exit_no_runtime "atlas-aci: --container set but no runtime (docker/podman) has $(image_tag).
-  Fix: eidolons atlas aci install --container --runtime <docker|podman>"
+    # Runtime was set from positional; verify it's on PATH.
+    if ! command -v "$RUNTIME" >/dev/null 2>&1; then
+      err "atlas-aci: requested runtime '$RUNTIME' is not on PATH. Install it or omit the positional to use host mode."
+      exit 7
     fi
-    return 0
+    # Verify the image is present (digest-first, then tag fallback).
+    if "$RUNTIME" image inspect "$_digest_ref" >/dev/null 2>&1; then
+      return 0
+    fi
+    if "$RUNTIME" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+         | grep -q "^$(image_tag)$"; then
+      return 0
+    fi
+    exit_prereq "atlas-aci: runtime '$RUNTIME' has no atlas-aci image.
+  Digest probe: ${_digest_ref}
+  Tag probe:    $(image_tag)
+  Fix:    eidolons atlas aci wire $RUNTIME                       # build + wire
+       or eidolons mcp atlas-aci pull                            # pull pre-built image"
   fi
 
+  # No runtime positional — auto-detect.
+
+  # 1. Host mode: atlas-aci binary on PATH.
   if command -v atlas-aci >/dev/null 2>&1; then
     CONTAINER_MODE=false
     return 0
   fi
 
+  # 2+3. Digest-first probe across available runtimes.
+  for rt in docker podman; do
+    if command -v "$rt" >/dev/null 2>&1; then
+      if "$rt" image inspect "$_digest_ref" >/dev/null 2>&1; then
+        CONTAINER_MODE=true
+        RUNTIME="$rt"
+        return 0
+      fi
+    fi
+  done
+
+  # 4. Tag fallback: self-built images with atlas-aci:<ATLAS_VERSION> tag.
   for rt in docker podman; do
     if command -v "$rt" >/dev/null 2>&1; then
       if "$rt" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
@@ -1710,12 +1700,28 @@ detect_index_mode() {
     fi
   done
 
-  exit_prereq "atlas-aci: cannot find an installed atlas-aci.
-  Tried:  command -v atlas-aci          (host mode)
-          docker images $(image_tag)
-          podman images $(image_tag)    (container mode)
-  Fix:    eidolons atlas aci install                                        # host mode
-       or eidolons atlas aci install --container --runtime <docker|podman>  # container mode"
+  # 5. Stale-tag probe: any older atlas-aci tag present → distinguished message.
+  local _found_tag=""
+  for rt in docker podman; do
+    if command -v "$rt" >/dev/null 2>&1; then
+      _found_tag="$("$rt" images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+        | grep "^${ATLAS_ACI_IMAGE_REF}:" | head -n1)" || true
+      if [ -n "$_found_tag" ]; then
+        local _found_ver="${_found_tag#${ATLAS_ACI_IMAGE_REF}:}"
+        exit_prereq "atlas-aci: image present but version mismatch (found ${_found_ver}, expected ${ATLAS_VERSION}). Re-run 'eidolons mcp atlas-aci pull' to refresh."
+      fi
+    fi
+  done
+
+  # 6. Nothing found anywhere.
+  exit_prereq "atlas-aci: no installation detected.
+  Tried:  command -v atlas-aci                              (host mode)
+          docker image inspect ${ATLAS_ACI_IMAGE_REF}@<digest>
+          podman image inspect ${ATLAS_ACI_IMAGE_REF}@<digest>
+          docker/podman images ${ATLAS_ACI_IMAGE_REF}:<tag>  (tag fallback)
+  Fix:    eidolons atlas aci wire                           # host mode
+       or eidolons atlas aci wire <docker|podman>           # container mode
+       or eidolons mcp atlas-aci pull                       # pull pre-built image"
 }
 
 main_index() {
@@ -1727,7 +1733,7 @@ main_index() {
   if [ "$CONTAINER_MODE" = "true" ] && [ "$DRY_RUN" != "true" ]; then
     LOCAL_DIGEST="$(capture_registry_digest)" || \
       exit_prereq "atlas-aci: $(image_tag) image disappeared from $RUNTIME between detection and indexing.
-  Fix: eidolons atlas aci install --container --runtime $RUNTIME"
+  Fix: eidolons atlas aci wire $RUNTIME"
   fi
 
   if [ "$CONTAINER_MODE" = "true" ]; then
@@ -1744,7 +1750,7 @@ main_index() {
   ok "Re-index complete."
 }
 
-main_install() {
+main_wire() {
   check_prereqs
 
   local hosts_csv
@@ -1759,13 +1765,13 @@ main_install() {
   [ "$DRY_RUN" = "true" ] && info "Dry-run mode — no files will be modified"
 
   if [ "$CONTAINER_MODE" = "true" ]; then
-    main_install_container "$hosts_csv"
+    main_wire_container "$hosts_csv"
   else
-    main_install_uv "$hosts_csv"
+    main_wire_uv "$hosts_csv"
   fi
 }
 
-main_install_uv() {
+main_wire_uv() {
   local hosts_csv="$1"
   # Ordering: .gitignore first (cheapest), then index (slowest — aborts
   # early if broken), then MCP writes. §A13 requires index failure to
@@ -1786,10 +1792,10 @@ main_install_uv() {
   ok "atlas-aci (uv) wired into $hosts_csv"
 }
 
-main_install_container() {
+main_wire_container() {
   local hosts_csv="$1"
 
-  # Step 1: runtime selection (D1 = always-prompt).
+  # Step 1: runtime is already set from the positional; select_runtime is a guard.
   select_runtime
 
   # Step 2: build or verify image. Sets LOCAL_DIGEST.
@@ -1861,7 +1867,10 @@ main_remove() {
 }
 
 case "$ACTION" in
-  install) main_install ;;
+  wire)    main_wire ;;
+  install)
+    err "Unknown action: install (did you mean 'wire'? — renamed in ATLAS v1.8.0; see CHANGELOG)"
+    exit 2 ;;
   index)   main_index ;;
   remove)  main_remove ;;
   *)       exit_usage "Unknown action: $ACTION" ;;

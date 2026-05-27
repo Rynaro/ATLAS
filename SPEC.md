@@ -328,10 +328,10 @@ the pinned `ATLAS_ACI_REF` git ref and wires MCP host configs to use
 Smoke test for the container path:
 
 ```sh
-eidolons atlas aci --container --runtime docker --install --host claude-code
-# Expected: BUILD atlas-aci:1.1.0 → image digest captured → .mcp.json written.
+eidolons atlas aci wire docker --host claude-code
+# Expected: BUILD atlas-aci:<version> → image digest captured → .mcp.json written.
 # Second run: no-op (digest unchanged).
-eidolons atlas aci --container --runtime docker --install --host claude-code
+eidolons atlas aci wire docker --host claude-code
 # Expected: "already up-to-date" — no writes.
 ```
 

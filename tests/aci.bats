@@ -222,7 +222,7 @@ EOF
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --dry-run --non-interactive
+  run_aci wire docker --dry-run --non-interactive
   [ "$status" -eq 0 ]
 
   # Stdout must contain BUILD action for the image.
@@ -255,7 +255,7 @@ EOF
   uninstall_stub "docker"
   seed_claude_host
 
-  run_aci --install --container --runtime podman --dry-run --non-interactive
+  run_aci wire podman --dry-run --non-interactive
   [ "$status" -eq 0 ]
   [[ "$output" == *"BUILD"* ]] || {
     echo "Expected BUILD in dry-run output (podman):"
@@ -277,7 +277,7 @@ EOF
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ]
 
@@ -313,7 +313,7 @@ EOF
   setup_stubs
   seed_claude_host
 
-  run_aci --install --non-interactive
+  run_aci wire --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ]
 
@@ -343,7 +343,7 @@ EOF
   install_stub "atlas-aci" 0 ':'
   : > AGENTS.md   # codex host marker
 
-  run_aci --install --container --runtime docker --non-interactive --host codex
+  run_aci wire docker --non-interactive --host codex
   [ "$status" -eq 0 ]
   [ -f ".codex/config.toml" ]
 
@@ -368,14 +368,14 @@ EOF
   seed_claude_host
 
   # First install: image absent → stub builds it (creates sentinel).
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ] || { echo ".mcp.json not created on first install"; return 1; }
   local first
   first="$(normalise_json .mcp.json)"
 
   # Second install: image exists (sentinel present), configs already match → noop.
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   local second
   second="$(normalise_json .mcp.json)"
@@ -398,7 +398,7 @@ EOF
   seed_claude_host
 
   # Step 1: uv install.
-  run_aci --install --host claude-code --non-interactive
+  run_aci wire --host claude-code --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ] || { echo ".mcp.json not created by uv install"; return 1; }
   run jq -r '.mcpServers["atlas-aci"].command' .mcp.json
@@ -410,7 +410,7 @@ EOF
   # Step 2: container install → must overwrite uv body with docker body.
   install_stub "git" 0
   install_docker_stub
-  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  run_aci wire docker --host claude-code --non-interactive
   [ "$status" -eq 0 ]
   run jq -r '.mcpServers["atlas-aci"].command' .mcp.json
   [ "$output" = "docker" ] || {
@@ -421,7 +421,7 @@ EOF
   after_switch="$(normalise_json .mcp.json)"
 
   # Step 3: second container install → idempotent (same digest → noop).
-  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  run_aci wire docker --host claude-code --non-interactive
   [ "$status" -eq 0 ]
   local after_second
   after_second="$(normalise_json .mcp.json)"
@@ -484,7 +484,7 @@ EOF
   uninstall_stub "podman"
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 7 ] || {
     echo "Expected exit 7, got $status"
     printf '%s\n' "$output"
@@ -497,18 +497,22 @@ EOF
   }
 }
 
-@test "G9: no runtime on PATH (no --runtime) in non-interactive → exit 7 or 9" {
+@test "G9: --container flag is now unknown (renamed to positional) → exit 2" {
   setup_fresh_project
   install_stub "git" 0
   uninstall_stub "docker"
   uninstall_stub "podman"
   seed_claude_host
 
-  run_aci --install --container --non-interactive
-  # Could exit 7 (no runtime found) or 9 (non-interactive without --runtime)
-  # depending on whether prereq check fires before runtime selection.
-  [ "$status" -eq 7 ] || [ "$status" -eq 9 ] || {
-    echo "Expected exit 7 or 9, got $status"
+  # --container flag was removed in v1.8.0; use positional `docker` or `podman`.
+  run_aci --container --non-interactive
+  [ "$status" -eq 2 ] || {
+    echo "Expected exit 2 (--container is unknown option), got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"Unknown option: --container"* ]] || {
+    echo "Expected 'Unknown option: --container' in output:"
     printf '%s\n' "$output"
     return 1
   }
@@ -529,7 +533,7 @@ args = ["serve", "--repo", "/custom/override/path"]
 env = {MY_KEY = "1"}
 EOF
 
-  run_aci --install --container --runtime docker --host codex --non-interactive
+  run_aci wire docker --host codex --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 (warn+refuse), got $status"
     printf '%s\n' "$output"
@@ -560,7 +564,7 @@ EOF
 
   seed_uv_mcp_json ".mcp.json"
 
-  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  run_aci wire docker --host claude-code --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 after mode switch, got $status"
     printf '%s\n' "$output"
@@ -583,20 +587,22 @@ EOF
 
 # ─── G17 ─────────────────────────────────────────────────────────────────
 
-@test "G17: --container --non-interactive without --runtime → exit 9" {
+@test "G17: --container flag removed in v1.8.0; use positional runtime → exit 2" {
+  # In v1.8.0, --container was removed. Use `wire docker` or `wire podman`.
+  # exit 9 (non-interactive without --runtime) is also retired.
   setup_fresh_project
   install_stub "git" 0
   install_docker_stub
   seed_claude_host
 
-  run_aci --install --container --non-interactive
-  [ "$status" -eq 9 ] || {
-    echo "Expected exit 9 (non-interactive without --runtime), got $status"
+  run_aci wire --container --non-interactive
+  [ "$status" -eq 2 ] || {
+    echo "Expected exit 2 (--container is unknown option), got $status"
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"--runtime"* ]] || {
-    echo "Expected --runtime mention in error message:"
+  [[ "$output" == *"Unknown option: --container"* ]] || {
+    echo "Expected 'Unknown option: --container' in error message:"
     printf '%s\n' "$output"
     return 1
   }
@@ -610,7 +616,7 @@ EOF
   seed_claude_host
 
   # First install: builds image, writes .mcp.json.
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ] || { echo ".mcp.json not created on first install"; return 1; }
   local first_content
@@ -621,7 +627,7 @@ EOF
   first_build_count="$(docker_build_count)"
 
   # Second install: image present (sentinel set by first build), configs match → noop.
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
 
   local second_content
@@ -657,7 +663,7 @@ EOF
   install_stub "git" 0
   install_docker_stub
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   [ -f ".mcp.json" ] || { echo ".mcp.json not created on first install"; return 1; }
 
@@ -685,14 +691,14 @@ EOF
 
 # ─── Additional coverage ──────────────────────────────────────────────────
 
-@test "container mode: --runtime docker bypasses interactive prompt" {
+@test "container mode: wire docker positional selects docker runtime" {
   setup_fresh_project
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
-    echo "Expected exit 0 when --runtime docker provided, got $status"
+    echo "Expected exit 0 when docker positional provided, got $status"
     printf '%s\n' "$output"
     return 1
   }
@@ -705,7 +711,7 @@ EOF
   set_docker_build_fail
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 8 ] || {
     echo "Expected exit 8 on build failure, got $status"
     printf '%s\n' "$output"
@@ -723,7 +729,7 @@ EOF
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --dry-run --non-interactive
+  run_aci wire docker --dry-run --non-interactive
   [ "$status" -eq 0 ]
 
   local build_count
@@ -740,7 +746,7 @@ EOF
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status"
     printf '%s\n' "$output"
@@ -753,13 +759,19 @@ EOF
   }
 }
 
-@test "container mode: unknown --runtime value → exit 2" {
+@test "container mode: unknown runtime positional → exit 2" {
   setup_fresh_project
   seed_claude_host
 
-  run_aci --install --container --runtime nerdctl --non-interactive
+  # In v1.8.0, runtime is a positional after the action; unknown values exit 2.
+  run_aci wire nerdctl --non-interactive
   [ "$status" -eq 2 ] || {
-    echo "Expected exit 2 for unknown runtime, got $status"
+    echo "Expected exit 2 for unknown runtime positional, got $status"
+    printf '%s\n' "$output"
+    return 1
+  }
+  [[ "$output" == *"Unknown runtime: nerdctl"* ]] || {
+    echo "Expected 'Unknown runtime: nerdctl' in output:"
     printf '%s\n' "$output"
     return 1
   }
@@ -829,7 +841,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker, ghcr.io/rynaro/atlas-aci:1.4.2)"* ]] || {
+  [[ "$output" == *"Mode: container (docker"* ]] || {
     echo "Expected container-mode banner:"
     printf '%s\n' "$output"
     return 1
@@ -860,7 +872,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"cannot find an installed atlas-aci"* ]] || {
+  [[ "$output" == *"no installation detected"* ]] || {
     echo "Expected actionable error message:"
     printf '%s\n' "$output"
     return 1
@@ -936,19 +948,19 @@ esac'
   }
 }
 
-@test "IDX-8: index --container --runtime docker forces container mode even if atlas-aci is on PATH" {
+@test "IDX-8: index docker positional forces container mode even if atlas-aci is on PATH" {
   setup_fresh_project
   install_stub "atlas-aci" 0 ':'      # host binary present …
   install_docker_stub_prebuilt        # … and docker prebuilt image present.
 
-  # User explicitly forces container mode → should ignore the host stub.
-  run_aci index --container --runtime docker
+  # User explicitly forces container mode via positional → should ignore the host stub.
+  run_aci index docker
   [ "$status" -eq 0 ]
   [[ "$output" == *"Mode: container"* ]]
   grep -q '^run.*index' "$BATS_TEST_TMPDIR/docker.log"
   # Host atlas-aci must NOT have been called.
   [ ! -s "$BATS_TEST_TMPDIR/atlas-aci.log" ] || {
-    echo "atlas-aci host binary was called despite --container override"
+    echo "atlas-aci host binary was called despite docker positional override"
     cat "$BATS_TEST_TMPDIR/atlas-aci.log"
     return 1
   }
@@ -967,7 +979,7 @@ esac'
   seed_claude_host
   seed_claude_atlas_subagent
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
 
   local tools_line
@@ -989,7 +1001,7 @@ esac'
   seed_claude_host
   seed_claude_atlas_subagent
 
-  run_aci --install --non-interactive
+  run_aci wire --non-interactive
   [ "$status" -eq 0 ]
 
   grep -E '^tools:.*mcp__atlas-aci__search_symbol' .claude/agents/atlas.md || {
@@ -1005,12 +1017,12 @@ esac'
   seed_claude_host
   seed_claude_atlas_subagent
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   local first
   first="$(cat .claude/agents/atlas.md)"
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   local second
   second="$(cat .claude/agents/atlas.md)"
@@ -1028,7 +1040,7 @@ esac'
   seed_claude_host
   seed_claude_atlas_subagent
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   grep -q 'mcp__atlas-aci__' .claude/agents/atlas.md   # sanity: install extended
 
@@ -1056,7 +1068,7 @@ esac'
   local before
   before="$(cat .claude/agents/atlas.md)"
 
-  run_aci --install --container --runtime docker --dry-run --non-interactive
+  run_aci wire docker --dry-run --non-interactive
   [ "$status" -eq 0 ]
 
   [[ "$output" == *"MODIFY"*".claude/agents/atlas.md"* ]] || {
@@ -1080,7 +1092,7 @@ esac'
   seed_claude_host
   # Deliberately do NOT seed .claude/agents/atlas.md.
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ]
   [[ "$output" == *"subagent file absent"* ]] || {
     echo "Expected info message about absent subagent file:"
@@ -1115,7 +1127,7 @@ esac'
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"
@@ -1178,7 +1190,7 @@ esac'
   setup_container_stubs
   mkdir -p .codex
 
-  run_aci --install --container --runtime docker --host codex --non-interactive
+  run_aci wire docker --host codex --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"
@@ -1251,7 +1263,7 @@ esac'
 EOF
 
   # Re-run --container: should NOT refuse; should upgrade to registry-prefixed form.
-  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  run_aci wire docker --host claude-code --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 (legacy body accepted + upgraded), got $status:"
     printf '%s\n' "$output"
@@ -1289,7 +1301,7 @@ tools:
 ATLAS agent.
 EOF
 
-  run_aci --install --container --runtime docker --host copilot --non-interactive
+  run_aci wire docker --host copilot --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"
@@ -1331,7 +1343,7 @@ EOF
   mkdir -p .codex
 
   # Install claude-code host (writes .mcp.json).
-  run_aci --install --container --runtime docker --host claude-code --non-interactive
+  run_aci wire docker --host claude-code --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"
@@ -1339,7 +1351,7 @@ EOF
   }
 
   # Install codex host (writes .codex/config.toml).
-  run_aci --install --container --runtime docker --host codex --non-interactive
+  run_aci wire docker --host codex --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 (codex), got $status:"
     printf '%s\n' "$output"
@@ -1397,7 +1409,7 @@ EOF
     rm -rf .atlas
   }
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"
@@ -1442,7 +1454,7 @@ EOF
   install_docker_stub_digest_only
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"
@@ -1478,7 +1490,7 @@ EOF
   codex_before="$(cat ".codex/config.toml" 2>/dev/null || printf 'ABSENT')"
   agents_before="$(cat "AGENTS.md" 2>/dev/null || printf 'ABSENT')"
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -ne 0 ] || {
     echo "Expected non-zero exit on index failure, got 0"
     printf '%s\n' "$output"
@@ -1537,7 +1549,7 @@ EOF
   codex_before="$(cat ".codex/config.toml" 2>/dev/null || printf 'ABSENT')"
   agents_before="$(cat "AGENTS.md" 2>/dev/null || printf 'ABSENT')"
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -ne 0 ] || {
     echo "Expected non-zero exit on silent-success (perm denied) path, got 0"
     printf '%s\n' "$output"
@@ -1584,7 +1596,7 @@ EOF
   set_docker_index_empty_lang
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 for empty-lang repo (no parse_failed), got $status:"
     printf '%s\n' "$output"
@@ -1621,7 +1633,7 @@ EOF
   install_stub "git" 0
   install_docker_stub
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 with getenforce=Enforcing, got $status:"
     printf '%s\n' "$output"
@@ -1649,7 +1661,7 @@ EOF
   install_stub "git" 0
   install_docker_stub
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0 with getenforce=Permissive, got $status:"
     printf '%s\n' "$output"
@@ -1669,7 +1681,7 @@ EOF
   setup_container_stubs
   seed_claude_host
 
-  run_aci --install --container --runtime docker --non-interactive
+  run_aci wire docker --non-interactive
   [ "$status" -eq 0 ] || {
     echo "Expected exit 0, got $status:"
     printf '%s\n' "$output"

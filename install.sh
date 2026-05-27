@@ -5,7 +5,7 @@ set -euo pipefail
 
 EIDOLON_NAME="atlas"
 EIDOLON_SLUG="atlas"
-EIDOLON_VERSION="1.7.2"
+EIDOLON_VERSION="1.8.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -318,6 +318,7 @@ maybe_mkdir() {
 }
 
 maybe_mkdir "${TARGET}"
+maybe_mkdir "${TARGET}/commands"
 maybe_mkdir "${TARGET}/skills"
 maybe_mkdir "${TARGET}/templates"
 maybe_mkdir "${TARGET}/schemas"
@@ -358,6 +359,24 @@ if [[ "$MANIFEST_ONLY" != "true" ]]; then
   # ECL envelope template — stored under schemas/ (§1.7.2: MAY vendor additional
   # JSON schemas; templates/ only allows .md per §1.7.1 whitelist).
   copy_file "templates/scout-report.envelope.json"      "${TARGET}/schemas/scout-report.envelope.json"   "other"
+
+  # Commands — aci.sh is the atlas-aci wiring subcommand, dispatched by the
+  # nexus at .eidolons/atlas/commands/aci.sh. Copy and substitute the
+  # __ATLAS_VERSION__ placeholder so the installed script carries the correct
+  # version constant without any hand-editing.
+  if [[ -f "${SCRIPT_DIR}/commands/aci.sh" ]]; then
+    if [[ "$DRY_RUN" != "true" ]]; then
+      mkdir -p "${TARGET}/commands"
+      _aci_dst="${TARGET}/commands/aci.sh"
+      sed "s/__ATLAS_VERSION__/${EIDOLON_VERSION}/g" \
+        "${SCRIPT_DIR}/commands/aci.sh" > "${_aci_dst}"
+      chmod +x "${_aci_dst}"
+      _aci_chk=$(sha256_file "${_aci_dst}")
+      FILES_WRITTEN+=("{\"path\":\"${_aci_dst}\",\"sha256\":\"${_aci_chk}\",\"role\":\"command\",\"mode\":\"created\"}")
+    else
+      echo "  [dry-run] substitute+copy commands/aci.sh → ${TARGET}/commands/aci.sh"
+    fi
+  fi
 fi
 
 # --------------------------------------------------------------------------- #
