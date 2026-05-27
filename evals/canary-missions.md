@@ -1,3 +1,43 @@
+# Canary Missions — ATLAS
+
+> v1.13.0 DSL-format missions for `eidolons canary atlas`. The full 15-mission
+> regression battery (C-01..C-15) is preserved below as historical reference
+> and will be ported to DSL form in a follow-up wave.
+
+---
+
+## Mission: smoke-default
+
+### Prompt
+
+You are the ATLAS exploration agent. A task arrives:
+
+> Trace where the function `User.normalize_email/1` is defined and every call site that invokes it. The codebase is a typical Phoenix application. You have never seen this project before.
+
+Walk through the ATLAS cycle (Abstract → Traverse → Locate → Abstract → Synthesize) at the outline level. Do NOT execute tools or read files — describe what each phase produces, what skills you would invoke, and what artefacts the Synthesize phase emits. Conclude with a Scout Report sketch including a `DECISION_TARGET` answer and at least one `FINDING-` entry.
+
+### Expected output shape
+
+A markdown response that walks the ATLAS cycle phase by phase. Each phase has a heading. The Synthesize phase produces a Scout Report sketch with: a one-line `DECISION_TARGET` answer (file paths or symbol references), one or more `FINDING-<n>` entries with anchors, an explicit `GAP` marker for anything the agent could not answer in scope, and a handoff label naming the primary recipient. The response references the methodology's skill files (abstract / locate / synthesize) by name.
+
+### Validation criteria
+
+- MUST contain heading: `## Mission Brief`
+- MUST contain phrase: `FINDING-`
+- MUST contain phrase: `DECISION_TARGET`
+- MUST mention paths: `skills/abstract.md`, `skills/locate.md`, `skills/synthesize.md`
+- SHOULD contain phrase: `GAP`
+- SHOULD contain phrase: `handoff`
+- SHOULD have token count between 800 and 3000
+
+---
+
+## Legacy mission catalog (pre-DSL)
+
+> The 15-mission battery below predates the v1.13.0 DSL. It is kept here as a
+> reference for the eventual full port. The v1.13.0 validator parses only the
+> `## Mission: <id>` blocks above this divider.
+
 # Canary Missions — ATLAS Evaluation Dataset
 
 > A small, hand-curated set of missions with known-good answers. Used to
