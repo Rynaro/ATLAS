@@ -7,6 +7,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.7.2] — 2026-05-27 — Canary DSL migration
+
+### Changed
+
+- feat(canary): migrate evals/canary-missions.md to v1.13.0 DSL (smoke-default mission). Full 15-mission battery preserved as historical reference.
+
+---
+
 ## [1.7.1] — 2026-05-26 — SPEC.md text sweep
 
 ### Fixed
