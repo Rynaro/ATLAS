@@ -18,10 +18,19 @@ load helpers
 FAKE_DIGEST_LOCAL="aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
 
 # _install_local_docker_stub — base docker stub (no prebuilt image).
+#
+# Sentinel files honoured by the stub:
+#   ${BATS_TEST_TMPDIR}/docker.sentinel              — `docker images` returns a tag.
+#   ${BATS_TEST_TMPDIR}/docker.sentinel.inspect      — `docker image inspect` succeeds.
+#   ${BATS_TEST_TMPDIR}/docker.images_tag_match      — when present, the tag emitted
+#       by `docker images` is the contents of this file (e.g. the live ATLAS_VERSION
+#       placeholder, so the tag-fallback grep in detect_index_mode hits).
+#       Absent → emits the stale literal ':1.4.2', exercising the stale-tag path.
 _install_local_docker_stub() {
   local logfile="$BATS_TEST_TMPDIR/docker.log"
   local sentinel="$BATS_TEST_TMPDIR/docker.sentinel"
   local inspect_sentinel="${sentinel}.inspect"
+  local tag_match_file="$BATS_TEST_TMPDIR/docker.images_tag_match"
   local build_fail_file="$BATS_TEST_TMPDIR/docker.build_fail"
   rm -f "$sentinel" "$build_fail_file"
   cat > "$STUBS_DIR/docker" <<STUB
@@ -31,13 +40,23 @@ case "\$1" in
   images)
     # Repository:Tag format query (tag fallback path).
     if [ -f "${sentinel}" ]; then
-      printf 'ghcr.io/rynaro/atlas-aci:1.4.2\n'
+      if [ -f "${tag_match_file}" ]; then
+        # Test wants tag-fallback HIT — emit whatever tag the test pinned.
+        cat "${tag_match_file}"
+      else
+        # Default: emit a stale tag so the stale-tag probe fires.
+        printf 'ghcr.io/rynaro/atlas-aci:1.4.2\n'
+      fi
     fi
     exit 0
     ;;
   image)
     # docker image inspect REF — digest-first probe.
-    if [ -f "${sentinel}" ] || [ -f "${inspect_sentinel}" ]; then
+    # Only the inspect_sentinel signals digest presence. The plain `sentinel`
+    # is the *tag-fallback* sentinel only — keeping them decoupled lets
+    # T-IDX-2 exercise tag-fallback (no digest), T-IDX-4 exercise stale-tag
+    # (no digest, wrong tag), and T-IDX-1 exercise digest-only (no tag).
+    if [ -f "${inspect_sentinel}" ]; then
       exit 0
     fi
     exit 1
@@ -100,6 +119,12 @@ STUB
   _install_local_docker_stub
   # Set sentinel so docker images returns the tag; but NOT inspect_sentinel.
   touch "$BATS_TEST_TMPDIR/docker.sentinel"
+  # Pin the tag to whatever ATLAS_VERSION is in the source script so the
+  # tag-fallback grep hits (handles the __ATLAS_VERSION__ placeholder
+  # pre-substitution AND any real version post-substitution).
+  local _src_ver
+  _src_ver="$(grep '^ATLAS_VERSION=' "$ACI_SCRIPT" | head -n1 | sed 's/ATLAS_VERSION="//;s/"//')"
+  printf 'ghcr.io/rynaro/atlas-aci:%s\n' "$_src_ver" > "$BATS_TEST_TMPDIR/docker.images_tag_match"
   # No atlas-aci on PATH.
 
   run_aci index

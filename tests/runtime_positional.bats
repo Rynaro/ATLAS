@@ -120,8 +120,11 @@ _rt_install_docker_prebuilt() {
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (docker"* ]] || {
-    echo "Expected 'Mode: container (docker' in output:"
+  # wire flow emits "✓ atlas-aci (container/docker) wired into ..." (line ~1836)
+  # plus "Mode: container (docker, ...)" during the index step (line ~1740).
+  # Either is acceptable evidence that docker was selected.
+  [[ "$output" == *"container/docker"* ]] || [[ "$output" == *"Mode: container (docker"* ]] || {
+    echo "Expected docker container mode in output:"
     printf '%s\n' "$output"
     return 1
   }
@@ -141,8 +144,8 @@ _rt_install_docker_prebuilt() {
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"Mode: container (podman"* ]] || {
-    echo "Expected 'Mode: container (podman' in output:"
+  [[ "$output" == *"container/podman"* ]] || [[ "$output" == *"Mode: container (podman"* ]] || {
+    echo "Expected podman container mode in output:"
     printf '%s\n' "$output"
     return 1
   }
