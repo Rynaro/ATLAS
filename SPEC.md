@@ -318,6 +318,35 @@ their `agent.md` frontmatter.
 
 ATLAS targets ECL v1.0 (declared in `ECL_VERSION`). v1.0 is opt-in; live consumers MAY ignore the envelope sidecar without losing scout-report functionality.
 
+## 9. Memory protocol (CRYSTALIUM)
+
+ATLAS integrates with CRYSTALIUM to build persistent, cross-session codebase
+intelligence. The pipeline is:
+
+| Hook | Phase | Call |
+|------|-------|------|
+| **Recall** | A (Assess / mission intake) | `mcp__crystalium__recall(scope, query, k=5, layers=[semantic,episodic,procedural])` — surface prior maps, conventions, known traps before any structural work. |
+| **Ingest** | S (Synthesize) | `mcp__crystalium__ingest(envelope, payload)` — persist the scout-report + ECL envelope at T1. Primary persist path; `from.eidolon=atlas` drives tier derivation. |
+| **Commit** | Mid-cycle (optional) | `mcp__crystalium__commit(layer=episodic, payload, provenance={author_agent:"atlas",...})` — direct episodic write for notable observations not worth a handoff. `author_agent` MUST be `"atlas"`. |
+| **Session end** | S (after ingest) | `mcp__crystalium__session_end()` — Dream trigger; call once per mission completion. |
+
+**Trust tier:** T1 for all ATLAS calls (set process-wide by `CRYSTALIUM_CALLER_TIER=T1`
+in the shared `.mcp.json`).
+
+**Read-only invariant:** the I-1 constraint applies to the *codebase* (no write
+tools against the repository). Calling `mcp__crystalium__*` memory tools is
+explicitly permitted and does not violate I-1.
+
+**Graceful skip:** if `mcp__crystalium__*` tools are unavailable (CRYSTALIUM not
+installed), all four hooks are silent no-ops. ATLAS is EIIS-standalone-conformant
+and works without CRYSTALIUM.
+
+For the full tool surface (8 tools), layer×tier matrix, Dream consolidation
+knobs, and `skill_invoke` / `plan_checkpoint` details, see the cortex deep table:
+`methodology/cortex/memory-protocol.md` (in the Eidolons nexus).
+
+---
+
 ## 8. atlas-aci MCP server — container mode (v1.1.0)
 
 ATLAS v1.1.0 adds `--container` support to `eidolons atlas aci`. The

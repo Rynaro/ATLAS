@@ -41,6 +41,33 @@ anything, hand off. Full spec: `SPEC.md`.
    sub-question → record in `GAPS` and move on.
 9. **Max recursion = 1.** Synthesize may spawn one follow-up mission. No more.
 
+## Memory pre-flight (Phase A — mission intake)
+
+Before any phase work begins, call CRYSTALIUM recall to surface relevant prior
+context (prior maps, known traps, conventions):
+
+```
+mcp__crystalium__recall(
+  scope    = { project: <cwd-project>, agent_class_visibility: "atlas" },
+  query    = <mission GOAL + DECISION_TARGET + target paths>,
+  k        = 5,
+  layers   = ["semantic", "episodic", "procedural"]
+)
+```
+
+Fold relevant hits into mission context before entering Phase T. The read-only
+constraint (I-1) applies to the codebase, not to the memory substrate — calling
+`mcp__crystalium__*` tools is explicitly allowed.
+
+**Graceful skip:** if `mcp__crystalium__*` tools are unavailable (CRYSTALIUM not
+installed), proceed without memory — never hard-fail. ATLAS is EIIS-standalone-
+conformant and works without CRYSTALIUM.
+
+See `skills/traverse.md` for the corresponding cross-reference at phase T entry.
+See `SPEC.md §9` for the full memory protocol summary.
+
+---
+
 ## Progressive disclosure — skill load order
 
 Always loaded: this file and `SPEC.md` §1–§2.

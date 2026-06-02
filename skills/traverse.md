@@ -15,6 +15,13 @@ about to emit `map.md`.
 
 **Unload when:** `map.md` passes exit criteria and you enter Phase L (Locate).
 
+> **Memory pre-flight:** `recall` MUST have fired in Phase A (see `agent.md`
+> §"Memory pre-flight") before Phase T begins. If it hasn't — e.g. this skill
+> was loaded directly — call it now with the mission objective and target paths
+> before any structural mapping. Fold relevant prior maps and known traps into
+> your mission context. If `mcp__crystalium__*` tools are unavailable, proceed
+> without memory — never hard-fail.
+
 ---
 
 ## Contract

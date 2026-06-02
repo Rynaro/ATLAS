@@ -32,6 +32,50 @@ A markdown response that walks the ATLAS cycle phase by phase. Each phase has a 
 
 ---
 
+## Mission: memory-round-trip
+
+### Prompt
+
+You are the ATLAS exploration agent with CRYSTALIUM installed and a prior
+crystal already stored (layer: episodic, author_agent: atlas, content:
+"RecordVote flow stores results in cast_vote_records via synchronous
+FlowObject — no background job path — FINDING-009 from ATLAS mission
+ATLAS-038"). A new task arrives:
+
+> Trace all callers of `RecordVote#call` and confirm whether any async
+> path exists. The codebase is a typical Rails application.
+
+Walk through the ATLAS memory integration: what recall call fires at mission
+intake (Phase A), what prior crystal it should surface, what the ingest call
+looks like after the scout-report envelope is emitted (Phase S), and what the
+session_end call closes. Then describe what happens when CRYSTALIUM is absent.
+Do NOT execute tools — describe the memory calls, their parameters, and their
+expected outcomes at each hook.
+
+### Expected output shape
+
+A markdown response covering four sections: (1) Phase A recall call with
+parameters and expected hit (the prior crystal about RecordVote), (2) how the
+prior crystal influences the mission (what the agent does differently), (3)
+Phase S ingest call with envelope + payload parameters confirming
+`author_agent=atlas` and T1 tier, followed by `session_end`, (4) graceful-skip
+behavior when CRYSTALIUM is absent (mission completes normally, no hard-fail).
+
+### Validation criteria
+
+- MUST contain phrase: `mcp__crystalium__recall`
+- MUST contain phrase: `mcp__crystalium__ingest`
+- MUST contain phrase: `mcp__crystalium__session_end`
+- MUST contain phrase: `author_agent`
+- MUST contain phrase: `"atlas"`
+- MUST contain phrase: `graceful` OR `unavailable` OR `absent`
+- MUST contain phrase: `T1`
+- SHOULD contain phrase: `from.eidolon`
+- SHOULD contain phrase: `episodic`
+- SHOULD contain phrase: `session_end`
+
+---
+
 ## Legacy mission catalog (pre-DSL)
 
 > The 15-mission battery below predates the v1.13.0 DSL. It is kept here as a
