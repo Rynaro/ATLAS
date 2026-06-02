@@ -43,28 +43,10 @@ anything, hand off. Full spec: `SPEC.md`.
 
 ## Memory pre-flight (Phase A — mission intake)
 
-Before any phase work begins, call CRYSTALIUM recall to surface relevant prior
-context (prior maps, known traps, conventions):
-
-```
-mcp__crystalium__recall(
-  scope    = { project: <cwd-project>, agent_class_visibility: "atlas" },
-  query    = <mission GOAL + DECISION_TARGET + target paths>,
-  k        = 5,
-  layers   = ["semantic", "episodic", "procedural"]
-)
-```
-
-Fold relevant hits into mission context before entering Phase T. The read-only
-constraint (I-1) applies to the codebase, not to the memory substrate — calling
-`mcp__crystalium__*` tools is explicitly allowed.
-
-**Graceful skip:** if `mcp__crystalium__*` tools are unavailable (CRYSTALIUM not
-installed), proceed without memory — never hard-fail. ATLAS is EIIS-standalone-
-conformant and works without CRYSTALIUM.
-
-See `skills/traverse.md` for the corresponding cross-reference at phase T entry.
-See `SPEC.md §9` for the full memory protocol summary.
+First action of Phase A: call `mcp__crystalium__recall` (scope `atlas`) and fold
+prior maps, conventions, and known traps into mission context before Phase T.
+Memory access is allowed under the read-only rule (I-1). Skip gracefully if
+`mcp__crystalium__*` is unavailable — never hard-fail. Protocol: `SPEC.md §9`.
 
 ---
 
@@ -121,20 +103,9 @@ phase: T | tokens_in: 4231 | tokens_out: 812 | tool_calls: 14 | fold_ratio: 0.18
 
 ## atlas-aci MCP server wiring
 
-To wire the atlas-aci MCP server into your project, run one of:
-
-```sh
-# host mode (default — needs python3>=3.11 + uv + ripgrep)
-eidolons atlas aci wire
-
-# container mode (needs docker or podman — no Python toolchain required)
-eidolons atlas aci wire docker                                # docker
-eidolons atlas aci wire podman --non-interactive             # podman, CI
-```
-
-Both modes are idempotent. A second run with the same image digest is a no-op.
-Use `--remove` to clean up. The `--dry-run` flag shows planned actions without
-touching disk.
+Wire the atlas-aci MCP server with `eidolons atlas aci wire` (host mode, default)
+or `eidolons atlas aci wire docker|podman` (container mode). Both are idempotent;
+`--remove` cleans up, `--dry-run` previews. Full prerequisites: `SPEC.md` / `INSTALL.md`.
 
 ## Identity
 
