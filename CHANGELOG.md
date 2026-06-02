@@ -7,6 +7,54 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.9.0] - 2026-06-02 — CRYSTALIUM memory pipeline
+
+### Added
+
+- **Memory protocol (CRYSTALIUM) — recall → ingest → session_end pipeline.**
+  Embeds the symbiotic memory protocol into ATLAS's methodology at phase-precise
+  hook points:
+  - **`agent.md` §"Memory pre-flight"**: `mcp__crystalium__recall` fires as the
+    FIRST action of Phase A (mission intake), before any structural mapping.
+    Surfaces prior maps, conventions, and known traps from all three layers
+    (semantic, episodic, procedural). Folds relevant hits into mission context.
+  - **`skills/traverse.md`**: cross-reference to the Phase A recall pre-flight;
+    if skill is loaded directly, recall fires here before structural mapping.
+  - **`skills/synthesize.md`**: after the ECL envelope sidecar is validated,
+    `mcp__crystalium__ingest(envelope, payload)` persists the scout-report at T1
+    with ECL provenance (`from.eidolon=atlas`). Optional mid-cycle
+    `mcp__crystalium__commit(layer=episodic, provenance.author_agent="atlas")`
+    for notable observations. `mcp__crystalium__session_end()` closes the
+    mission (Dream trigger). Two new exit gate items added.
+  - **`SPEC.md §9`**: "Memory protocol (CRYSTALIUM)" section — pipeline summary,
+    T1 tier, read-only invariant clarification, graceful-skip contract, and
+    pointer to `methodology/cortex/memory-protocol.md` for the full surface.
+  - **`evals/canary-missions.md`**: new DSL-format mission `memory-round-trip`
+    asserting: recall surfaces a prior crystal; ingest produces T1 episodic
+    record with `author_agent=atlas`; absent CRYSTALIUM → graceful skip.
+
+- **Graceful-skip contract (EIIS standalone conformance):** all four memory hooks
+  (`recall`, `ingest`, `commit`, `session_end`) are silent no-ops when
+  `mcp__crystalium__*` tools are unavailable. ATLAS is EIIS-standalone-conformant
+  without CRYSTALIUM.
+
+- **Read-only invariant clarification:** the I-1 read-only constraint applies to
+  the *codebase* (no write tools against the repository). Calling
+  `mcp__crystalium__*` memory tools is explicitly permitted and does not violate
+  I-1.
+
+### Notes
+
+- `ECL_VERSION` (2.0) and `EIIS_VERSION` (1.4) are unchanged.
+- `mcp__crystalium__*` tools are already in the ATLAS agent allowlist (injected
+  by the nexus via `grants_to_eidolons: all` in the CRYSTALIUM catalogue entry).
+  No wiring work required.
+- This is the reference implementation for the six-Eidolon CRYSTALIUM pipeline
+  campaign. Pattern: recall in entry phase → ingest at terminal ECL emit →
+  session_end at mission close → graceful-skip on all calls.
+
+---
+
 ## [1.8.0] - 2026-05-27
 
 ### Breaking

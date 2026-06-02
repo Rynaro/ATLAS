@@ -197,6 +197,52 @@ Reference contract: `eidolons-ecl/contracts/atlas-to-spectra.yaml` (in the
 Validate the emitted envelope against `schemas/ecl-envelope.v1.json` before
 marking Phase S complete.
 
+### CRYSTALIUM ingest (memory persistence)
+
+After the envelope sidecar is validated, persist the handoff to CRYSTALIUM:
+
+```
+mcp__crystalium__ingest(
+  envelope = <the validated scout-report.envelope.json contents>,
+  payload  = <scout-report.md contents>
+)
+```
+
+This records the scout-report at T1 with full ECL provenance (`from.eidolon=atlas`
+drives tier derivation; `integrity.value` is stored as `provenance.content_hash`).
+The read-only constraint (I-1) applies to the codebase — calling memory MCP tools
+is explicitly allowed and does not violate I-1.
+
+**Direct episodic notes (optional):** For notable mid-cycle observations not worth
+a full handoff (e.g. a non-obvious naming convention, a recurring gap pattern),
+call:
+
+```
+mcp__crystalium__commit(
+  layer      = "episodic",
+  payload    = <observation>,
+  provenance = { author_agent: "atlas", mission_id: <MISSION-ID> }
+)
+```
+
+`author_agent` MUST be `"atlas"` on every direct commit.
+
+### Session end
+
+After `ingest` completes (or after the handoff block if CRYSTALIUM is absent),
+call:
+
+```
+mcp__crystalium__session_end()
+```
+
+This triggers Dream consolidation asynchronously. Call it once per mission
+completion.
+
+**Graceful skip:** if `mcp__crystalium__*` tools are unavailable (CRYSTALIUM not
+installed), proceed without memory — skip the ingest and session_end calls and
+mark Phase S complete normally. Never hard-fail on absent CRYSTALIUM tools.
+
 ---
 
 ## Exit gate
@@ -208,6 +254,8 @@ marking Phase S complete.
 - [ ] Every GAP-XXX from the fold appears in §5.
 - [ ] Handoff block emitted and well-formed.
 - [ ] Envelope sidecar emitted, schema-valid against `schemas/ecl-envelope.v1.json`, `integrity.sha256` matches payload.
+- [ ] `mcp__crystalium__ingest` called with the envelope + payload (or CRYSTALIUM absent and skip noted).
+- [ ] `mcp__crystalium__session_end` called once (or CRYSTALIUM absent and skip noted).
 - [ ] Memex remains intact; downstream agents can dereference anchors.
 
 If exit gate fails, the mission did not complete. Report `STATUS: partial`
