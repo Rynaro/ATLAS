@@ -5,7 +5,7 @@ set -euo pipefail
 
 EIDOLON_NAME="atlas"
 EIDOLON_SLUG="atlas"
-EIDOLON_VERSION="1.9.0"
+EIDOLON_VERSION="1.10.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -594,6 +594,8 @@ if [[ "$MANIFEST_ONLY" != "true" ]]; then
   wire_skill "locate"
   wire_skill "abstract"
   wire_skill "synthesize"
+  wire_skill "scatter"
+  wire_skill "rescout"
 fi
 
 # ---- claude-code (methodology-level subagent + optional shared dispatch) --- #
@@ -797,7 +799,7 @@ SPEC_FILE_PATH="${SPEC_FILE_PATH#./}"
 # Source-of-truth SHA is computed from the installed flat file.
 build_skills_json() {
   local result="" skill src_path vendor_path src_sha vendor_sha
-  for skill in traverse locate abstract synthesize; do
+  for skill in traverse locate abstract synthesize scatter rescout; do
     src_path="${TARGET}/skills/${skill}.md"
     vendor_path=".claude/skills/${EIDOLON_SLUG}-${skill}/SKILL.md"
     if [ -f "${src_path}" ]; then

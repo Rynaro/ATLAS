@@ -55,6 +55,32 @@ graph_query("writers_to: cast_vote_records")    # if graph indexes DB ops
 
 Graph queries answer *relational* sub-questions without reading source.
 
+#### Graph-first decomposition (raise η before any windowed read)
+
+The 90/10 deterministic-first rule (I-3) means a relational sub-question should
+be **exhausted on the graph** before any Tier-4 read. Codify the verb
+vocabulary and reach for it first:
+
+| Verb | Answers |
+|------|---------|
+| `callers_of(sym)` / `callees_of(sym)` | direct call edges in/out of a symbol |
+| `implementers_of(iface)` / `subclasses_of(class)` | polymorphic dispatch targets |
+| `writers_to(table)` / `readers_of(table)` | data-flow endpoints (if graph indexes DB ops) |
+| `importers_of(module)` / `imported_by(module)` | module-coupling edges |
+| `transitive_callers(sym, depth=N)` | depth-bounded upstream reach (cap the depth — unbounded = a read in disguise) |
+| `callgraph_slice(scope)` | the sub-graph induced by a scope glob — used to **partition** a surface |
+
+Pushing more Locate work onto these deterministic structural probes is the
+single biggest lever on search-efficiency η: each is an O(1) index lookup with
+exact results, where an LLM-authored search is expensive and only
+probabilistically correct.
+
+**Partition derives from the graph, not from a guess.** When the surface is
+large enough to scatter (`skills/scatter.md`), the per-module fan-out partition
+is computed from **one** parent-side `callgraph_slice(scope)` — the disjoint
+clusters are a structural fact. Do **not** LLM-guess the clustering; that
+re-introduces the inference trap the deterministic-first rule exists to avoid.
+
 ### Tier 3 — Scoped lexical search
 
 ```
@@ -95,6 +121,13 @@ Test files often document intended behavior more cleanly than implementation.
 
 When the mission has ≥2 independent sub-questions, do not pursue them
 serially in your own context. Spawn subagents.
+
+> For a **large surface** (> 5 modules OR > 25 files) with ≥2 disjoint
+> sub-questions, this scatter is formalized as the TRANCE-gated **Scatter-Gather
+> Locate** sub-mode — see `skills/scatter.md` for the both-flags activation
+> trigger, the 5-branch fan-out cap, the deterministic graph-derived partition,
+> and the merge+dedup contract. Below the threshold (or for a single /
+> tightly-coupled sub-question), stay serial — the heuristics here apply.
 
 ### When to scatter
 

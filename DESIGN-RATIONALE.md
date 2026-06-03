@@ -207,3 +207,87 @@ is more useful to downstream agents than an inconclusive probe loop. The
 three consecutive failures indicates a genuine gap.
 
 **Source:** `SPEC.md §2.3`, `skills/locate/SKILL.md`
+
+---
+
+## Scatter-Gather Locate mode (G1 operationalization)
+
+**Decision:** Promote the diffuse Operator-pattern scatter primitives (I-4;
+`locate.md` Operator section; `agent.md` P0 rule 7) into a *first-class named
+sub-mode* — `skills/scatter.md` + `SPEC.md §2.3.1` — with a both-flags
+activation trigger (surface > 5 modules OR > 25 files AND ≥ 2
+topologically-disjoint sub-questions), a hard 5-branch fan-out cap, a
+deterministic graph-derived partition, per-branch budgets summing to ≤ parent,
+and a merge+dedup contract (highest-confidence merge on path/overlapping-line,
+`[DISPUTED]` on contradiction) that feeds the existing Phase A fold. GATED,
+never default; below threshold the mode is inert and Locate stays serial.
+
+**Rationale:** The primitives existed but were diffuse — no fan-out cap, no
+merge/dedup contract, no surface-size trigger, no stop condition — so the
+parallelism was a heuristic, not a mechanism. Making it mechanical is the lever
+the team is graded on. Read/explore parallelism is safe-by-construction for
+ATLAS because it never writes the codebase (I-1): worktree-style clean-context
+isolation here is a *trajectory-contamination* guard (each branch sees only its
+scope-slice, never another branch's path), not a write-conflict guard. The
+orchestrator-worker sweet spot is ~5 workers, hence the cap; budgets are
+*partitioned* not *multiplied* so scatter adds parallelism without a fresh
+budget; the partition is graph-derived (not LLM-guessed) to preserve the I-3
+deterministic-first discipline; and contradictions are surfaced (`[DISPUTED]`)
+rather than silently resolved, preserving evidence honesty. The merged list
+reuses the already-built AgentFold aggregator — no new machinery.
+
+**Honest scope.** The TRANCE-not-default gating, the 5-branch cap, and the
+both-flags auto-trigger are *prose* interpreted by the host LLM, not
+mechanically enforced; mechanical orchestration enforcement is a nexus-level
+routing-kernel concern. Whether a host actually runs branches concurrently is a
+runtime property — on a host without a subagent spawner the mode degrades to
+serial Locate with correctness preserved.
+
+**Source:** `SPEC.md §1 I-4 / §2.3.1`, `skills/scatter.md`,
+`skills/locate.md` (Operator section), `agent.md` P0 rule 7.
+
+---
+
+## Delta re-scout (incremental mode)
+
+**Decision:** Add a read-only, evidence-anchored *delta* re-scout
+(`skills/rescout.md` + `SPEC.md §2.6`): reuse a prior scout-report + Memex store
++ a `git diff` range to re-probe ONLY the changed surface, carry unchanged
+findings forward verbatim, and label each finding
+FRESH / UNCHANGED / RE-VERIFIED / NEWLY-STALE with its originating commit.
+
+**Rationale:** ATLAS's standing limitation is that it is a *separate step* with
+no always-on live index, so a scout goes stale the moment the code moves. The
+full A→T→L→A→S cycle is wasteful when only a few files changed. The delta mode
+narrows the staleness penalty: the changed surface is computed deterministically
+(`git diff` ∩ prior `MAP-MODULES`), Phase T re-runs over that surface only, and
+only findings whose `path:line` anchors intersect a changed hunk are re-probed —
+everything else is carried verbatim from Memex, which *preserves provenance*,
+ATLAS's read-only + evidence-anchored differentiator.
+
+**Honest scope (anti-over-claim).** This **narrows, does not close** the
+live-index gap. It is a faster evidence-anchored *re-run*, not an always-on
+index; a true live index is an atlas-aci runtime / nexus integration concern,
+not a methodology property. The spec and skill both state this explicitly so the
+score claim stays evidence-disciplined.
+
+**Source:** `SPEC.md §2.6 / §0 non-goals`, `skills/rescout.md`.
+
+---
+
+## Graph-first decomposition (raise η, derive the scatter partition)
+
+**Decision:** Extend the Tier-2 graph-query section of `skills/locate.md` with
+an explicit `graph_query` verb vocabulary (`callers_of`, `implementers_of`,
+`writers_to`, `importers_of`, depth-bounded `transitive_callers`,
+`callgraph_slice`) and prescribe that the Scatter-Gather partition is derived
+from a single `callgraph_slice(scope)` rather than LLM-guessed clustering.
+
+**Rationale:** Each graph verb is an O(1) index lookup with exact results;
+pushing relational sub-questions onto them before any windowed read is the
+single biggest lever on search-efficiency η (I-3). Deriving the scatter
+partition from the call-graph makes the fan-out plan a *structural fact* instead
+of an inference, which both raises partition quality (truly disjoint clusters →
+low cross-branch dedup) and keeps the deterministic-first discipline intact.
+
+**Source:** `SPEC.md §1 I-3`, `skills/locate.md` (Tier-2), `tools/bounded-aci-spec.md §graph_query`.
