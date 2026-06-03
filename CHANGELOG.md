@@ -7,6 +7,63 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.10.0] - 2026-06-03 — Scatter-Gather Locate mode + delta re-scout (G1 operationalization)
+
+### Added
+
+- **`skills/scatter.md` (`atlas-scatter`, Phase L sub-mode):** operationalizes
+  the G1 TRANCE form as a first-class named mode. Activation trigger
+  (both-flags: surface > 5 modules OR > 25 files AND ≥ 2 topologically-disjoint
+  `DECISION_TARGET` sub-questions), bounded fan-out plan (partition by
+  `MAP-MODULES` centrality clusters / a deterministic `graph_query`
+  call-graph slice, hard cap 5 branches, per-branch budget =
+  `parent_remaining / N`), Operator-pattern sub-mission spec (clean-context
+  subagent, one structured finding object, no transcript, I-4), and a
+  deterministic merge+dedup contract into `findings.md` (global id renumbering,
+  highest-confidence merge on path/overlapping-line, `[DISPUTED]` on
+  cross-branch contradiction instead of silent-merge). Merged findings flow into
+  the **existing** Phase A clean-context fold — no new aggregator. **TRANCE-gated,
+  never default;** below threshold the mode is inert and Locate stays serial.
+- **`skills/rescout.md` (`atlas-rescout`, Phase A/T mode):** read-only,
+  evidence-anchored **delta** re-scout that **narrows** the always-on-live-index
+  staleness gap. Reuses a prior scout-report + Memex store + a `git diff` range
+  to re-probe ONLY the changed surface, carries forward unchanged findings
+  verbatim (provenance preserved), and labels each finding
+  FRESH / UNCHANGED / RE-VERIFIED / NEWLY-STALE with its originating commit. A
+  faster evidence-anchored re-run, **not** an always-on index (that remains an
+  atlas-aci runtime / nexus concern).
+- **`SPEC.md §2.3.1`** (Scatter-Gather Locate mode) and **`SPEC.md §2.6`**
+  (Delta re-scout, incremental mode): authoritative contracts. **`SPEC.md §5`**
+  gains scatter-fan-out-efficiency and delta-recall eval axes.
+- **`evals/canary-missions.md`:** two new DSL missions `scatter-gather` and
+  `delta-rescout`.
+
+### Changed
+
+- **`skills/locate.md`:** Operator-pattern section cross-references
+  `skills/scatter.md`; Tier-2 graph-query section extended with a graph-first
+  decomposition subsection (explicit verb vocabulary; the scatter partition is
+  derived from a deterministic `graph_query` call-graph slice, not LLM-guessed)
+  to raise search-efficiency η (I-3).
+- **`install.sh`:** `wire_skill scatter` + `wire_skill rescout` added to the
+  per-skill emit block and the `build_skills_json` manifest loop;
+  `EIDOLON_VERSION` 1.9.0 → 1.10.0 (MINOR, additive). `agent.md` **unchanged**
+  (969 est. tokens — the ≤1000 P0 budget gate holds).
+- **`DESIGN-RATIONALE.md`:** research-to-decision entries for the Scatter-Gather
+  mode, the delta re-scout, and graph-first decomposition.
+
+### Notes
+
+- `EIIS_VERSION` (1.4) and `ECL_VERSION` (2.0) **unchanged**. `agent.md` not
+  touched. Both modes are TRANCE-gated and degrade gracefully to serial Locate
+  on hosts without a subagent spawner.
+- **Out of scope (nexus-level):** an always-on live index (the delta re-scout
+  narrows, does not close, this gap); mechanical orchestration enforcement of
+  the gating / 5-branch cap (host-LLM prose, not a routing kernel); a
+  contamination-resistant eval benchmark proving the lift; ECL→OTel per-branch
+  token attribution + hard budget-abort; and the actual concurrent subagent
+  runtime (a host/harness capability).
+
 ## [1.9.1] - 2026-06-02 — agent.md token-budget fix
 
 ### Fixed

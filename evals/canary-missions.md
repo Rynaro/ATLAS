@@ -76,6 +76,99 @@ behavior when CRYSTALIUM is absent (mission completes normally, no hard-fail).
 
 ---
 
+## Mission: scatter-gather
+
+### Prompt
+
+You are the ATLAS exploration agent. A task arrives against a large monorepo
+whose `map.md` reports 9 modules and ~140 files in scope:
+
+> Audit the authorization path of every public HTTP endpoint AND, independently,
+> trace every writer to the `audit_log` table. These are two unrelated concerns
+> spread across different modules.
+
+The surface exceeds 5 modules and 25 files, and the mission has two
+topologically-disjoint sub-questions. Decide whether to escalate to the
+Scatter-Gather Locate sub-mode and, if so, walk through its mechanics. Do NOT
+execute tools — describe the activation check, the fan-out plan, each
+sub-mission's shape, and how the branch findings are merged back. Conclude with
+a one-line note on what would have kept you in serial Locate instead.
+
+### Expected output shape
+
+A markdown response that (1) checks the both-flags activation trigger against
+the stated surface size and disjoint sub-questions, (2) derives a bounded
+fan-out plan capped at 5 branches with per-branch budgets, (3) describes each
+branch as a clean-context subagent returning exactly one structured object with
+no transcript, (4) describes the merge+dedup contract including the `[DISPUTED]`
+behavior on contradiction and the flow into the existing Phase A fold, and (5)
+states an explicit when-NOT-to-scatter condition. References the methodology's
+skill file by name.
+
+### Validation criteria
+
+- MUST contain phrase: `Scatter-Gather` OR `scatter`
+- MUST contain phrase: `both-flags` OR `both flags`
+- MUST mention paths: `skills/scatter.md`
+- MUST contain phrase: `5 branches` OR `5-branch` OR `cap`
+- MUST contain phrase: `no transcript` OR `one structured` OR `Operator`
+- MUST contain phrase: `DISPUTED` OR `dedup`
+- MUST contain phrase: `TRANCE` OR `gated` OR `not default`
+- SHOULD contain phrase: `clean-context` OR `clean context`
+- SHOULD contain phrase: `serial` OR `when NOT to scatter`
+- SHOULD have token count between 800 and 3000
+
+---
+
+## Mission: delta-rescout
+
+### Prompt
+
+You are the ATLAS exploration agent. A prior scout-report.md already exists for
+this surface (recorded at commit `abc1234`), with its Memex excerpt store
+intact, and several findings such as:
+
+> FINDING-014 (H): `RecordVote#call` is the sole writer to `cast_vote_records`
+> — app/flows/vote_casting/record_vote.rb:42-78.
+
+The code has since advanced to `HEAD`. A task arrives:
+
+> Re-establish currency of the prior scout against HEAD without re-running the
+> full mission.
+
+Walk through the delta re-scout (incremental mode): how you compute the changed
+surface, which Phase you re-run and over what scope, how you decide a prior
+finding is stale, what you re-probe, what you carry forward verbatim, and how
+the delta report labels each finding. Do NOT execute tools. Be explicit that
+this NARROWS but does not CLOSE the always-on-live-index gap.
+
+### Expected output shape
+
+A markdown response covering: (1) the changed-surface computation
+(`git diff` intersected with the prior `MAP-MODULES`), (2) Phase T re-run over
+the changed surface ONLY, (3) the stale-by-anchor-intersection rule, (4)
+re-probe of stale findings and verbatim carry-forward of unchanged ones from
+Memex with provenance preserved, (5) the per-finding delta labels FRESH /
+UNCHANGED / RE-VERIFIED / NEWLY-STALE with originating commit, and (6) an
+explicit honest-scope statement that the delta narrows (does not close) the
+live-index gap. References the methodology's skill file by name.
+
+### Validation criteria
+
+- MUST contain phrase: `delta` OR `re-scout` OR `rescout`
+- MUST mention paths: `skills/rescout.md`
+- MUST contain phrase: `git diff` OR `changed surface` OR `CHANGED-SURFACE`
+- MUST contain phrase: `STALE` OR `stale`
+- MUST contain phrase: `verbatim` OR `carry forward` OR `carried forward`
+- MUST contain phrase: `FRESH` OR `UNCHANGED` OR `RE-VERIFIED` OR `NEWLY-STALE`
+- MUST contain phrase: `narrow` OR `does not close` OR `not close`
+- SHOULD contain phrase: `Memex`
+- SHOULD contain phrase: `provenance`
+- SHOULD contain phrase: `live-index` OR `live index` OR `always-on`
+- SHOULD have token count between 800 and 3000
+
+---
+
 ## Legacy mission catalog (pre-DSL)
 
 > The 15-mission battery below predates the v1.13.0 DSL. It is kept here as a

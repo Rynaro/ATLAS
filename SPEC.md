@@ -31,7 +31,7 @@ requests. They survive model swaps.
 |---|-----------|-------------------|
 | I-1 | Read-only tool surface | Harness exposes only `view_file`, `search_symbol`, `search_text`, `list_dir`, `graph_query`, `test_dry_run`, `memex.read`. No `edit`, `shell.write`, `git.commit`. |
 | I-2 | Bounded ACI | `view_file` caps at ≤100 lines per call; `search_text` caps at ≤50 matches; `list_dir` caps at ≤200 entries. Overflow returns a pagination cursor. |
-| I-3 | 90/10 deterministic/probabilistic | Symbol lookup, AST/Tree-sitter queries, and `grep` are tried **before** any LLM-authored search. LLM inference is the synthesis layer, not the retrieval layer. |
+| I-3 | 90/10 deterministic/probabilistic | Symbol lookup, AST/Tree-sitter queries, and `grep` are tried **before** any LLM-authored search. LLM inference is the synthesis layer, not the retrieval layer. *Graph-first corollary:* relational sub-questions and the Scatter-Gather (§2.3.1) partition are derived from deterministic `graph_query` slices, not LLM-guessed clustering — pushing more Locate work onto structural probes raises search-efficiency η. |
 | I-4 | Operator pattern | Subagents run in ephemeral contexts. They return one structured `finding` object. Their raw transcripts are never merged into the parent context. |
 | I-5 | AgentFold at phase boundaries | Trajectory is `branch`/`return`-folded at every phase transition. Raw excerpts go to Memex; only an indexed summary remains in working memory. |
 | I-6 | Telemetry-driven compaction | Harness tracks `context_used_pct`. At ≥60% it triggers an asynchronous fold. At ≥85% it halts and forces a checkpoint. |
@@ -168,6 +168,50 @@ finding with `confidence ≥ M` *or* is documented in `GAPS` with rationale.
 
 ---
 
+### 2.3.1 Phase L sub-mode — Scatter-Gather Locate (TRANCE-gated)
+
+**Purpose.** Operationalize the Operator pattern (I-4) as a *first-class named
+mode* for large surfaces. Scatter-Gather is the G1 TRANCE form: parallel
+read-only fan-out of Locate probes across topologically-disjoint module
+clusters, each in a clean-context subagent, merged back into `findings.md`.
+Full mechanical contract: `skills/scatter.md`.
+
+**Default-or-gated.** GATED, never default. Standard-tier Locate stays serial.
+Scatter adds *parallelism only* — never a write tool, never a fresh budget,
+never an escape from a refusal gate (I-1 stands; read/explore parallelism is
+safe-by-construction because ATLAS never writes the codebase).
+
+**Activation (both-flags rule).** Escalate to Scatter-Gather only when **both**
+hold; either alone stays standard tier:
+
+- **Surface size:** `map.md` scope exceeds **> 5 modules OR > 25 files**.
+- **Disjoint sub-questions:** **≥ 2 topologically-disjoint** `DECISION_TARGET`
+  sub-questions (different modules / concerns).
+
+**Fan-out.** Partition is **deterministic** — derived from a single parent-side
+`graph_query` call-graph slice (or `MAP-MODULES` centrality clusters), not
+LLM-guessed. One sub-mission per disjoint cluster, **hard cap 5 branches**,
+per-branch budget = `parent_remaining / N` (branch budgets sum to ≤ parent
+remaining). Branches are scope-diverse, not N-identical.
+
+**Sub-mission.** Each branch is an ephemeral clean-context subagent seeded with
+ONLY its `map.md` scope-slice + one sub-question + its budget. It runs the
+Tier 1–5 ladder and returns exactly one structured object
+(`findings`, `gaps`, `ruled_out`, `telemetry`) — **no transcript** (I-4).
+
+**Merge + dedup.** The parent renumbers branch-local IDs to a global namespace,
+then dedups: findings matching on **(path, overlapping line-range)** merge into
+one, keeping the **highest** confidence tier and **unioning** anchors +
+`ruled_out` notes. Cross-branch **contradictions are NOT silently merged** —
+they emit a `[DISPUTED]` finding at confidence `L` pending a follow-up probe.
+The merged `findings.md` then flows into the **existing** Phase A clean-context
+fold (§2.4) unchanged — no new aggregator.
+
+**Stop condition.** Every sub-question has ≥1 merged finding at confidence ≥ M
+OR a `GAP`. Scatter does not re-spawn (max recursion = 1, §6).
+
+---
+
 ### 2.4 Phase A — Abstract
 
 **Purpose.** Compress the trajectory into a dense, high-fidelity summary
@@ -245,6 +289,38 @@ sub-questions answered or explicitly marked unanswerable.
 
 ---
 
+### 2.6 Delta re-scout (incremental mode)
+
+**Purpose.** A READ-ONLY, evidence-anchored *re-run* that reuses a prior
+scout-report + its Memex store + a git-diff range to re-probe **only** the
+changed surface, carrying unchanged findings forward verbatim. Full mechanical
+contract: `skills/rescout.md`.
+
+**Honest scope.** The delta re-scout **narrows** the staleness penalty of the
+always-on-live-index gap — it does **not close** it. ATLAS-as-a-separate-step
+is intrinsic to its read-only-by-construction design; a true always-on index is
+an atlas-aci runtime / nexus integration concern, not a methodology property
+(see §0 non-goals). Do not represent the delta mode as a live index.
+
+**Procedure.** (1) `CHANGED-SURFACE = git diff <prior_commit>..HEAD` files
+intersected with the prior `map.md` `MAP-MODULES`; (2) re-run Phase T
+deterministically over the changed surface ONLY (no LLM calls — Phase T rule);
+(3) mark a prior `FINDING-XXX` **STALE** iff its anchored `path:line` range
+intersects a changed hunk; (4) re-probe ONLY stale findings via the Locate
+ladder; (5) carry forward UNCHANGED findings **verbatim from Memex**,
+preserving provenance.
+
+**Output.** `delta-scout-report.md` — same class as `scout-report.md` (reuses
+`templates/scout-report.md` + `schemas/scout-report.v1.json`); its section-3
+labels each finding **FRESH / UNCHANGED / RE-VERIFIED / NEWLY-STALE** with the
+originating commit. Changed-surface files outside the prior scope are noted in
+`MAP-GAPS` (they may warrant a full scout), never silently dropped.
+
+**Read-only.** The diff is read via the deterministic Traverse ladder
+(`git diff` / `git log` / `rg`), never a write tool (I-1).
+
+---
+
 ## 3. Failure modes and mitigations
 
 | Failure | Mechanism | Mitigation |
@@ -289,6 +365,16 @@ ATLAS implementations are evaluated on three axes:
   consumed. Target: η ≥ 0.25. Below 0.1 indicates Inference Trap.
 - **Fold fidelity** — for each folded phase, what fraction of downstream
   answers still resolves correctly using only the fold summary? Target: ≥ 0.95.
+
+Two mode-specific axes apply when the corresponding sub-mode runs:
+
+- **Scatter fan-out efficiency** — `dedup_count / total_branch_findings` should
+  be low on a *correctly disjoint* partition; a high value means the clusters
+  overlapped (the trigger or the graph slice was too coarse).
+- **Delta-recall** — for a delta re-scout (§2.6), the fraction of prior findings
+  correctly labelled FRESH / UNCHANGED / RE-VERIFIED / NEWLY-STALE against
+  ground truth, and the `reprobe_tool_calls vs full-scout estimate` saving (the
+  quantified staleness-narrowing, not closure).
 
 Canary dataset lives in `evals/canary-missions.md`. Benchmark hooks into
 SWE-bench (repository-navigation subset) and `AgencyBench` when available.
