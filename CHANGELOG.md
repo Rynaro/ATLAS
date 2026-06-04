@@ -7,6 +7,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`skills/verify-incoming.md` (`atlas-verify-incoming`):** blocking, symmetric
+  receiver-side ECL §6.2.2 integrity gate. Replaces the previous warn-only
+  opt-in: when a sibling `.envelope.json` is present, ATLAS MUST NOT process the
+  payload unless a `verify_pass` trace event (written by the orchestrator via
+  `eidolons verify-envelope --block`) is on record. On an unverified or failed
+  envelope, ATLAS REFUSEs and hands back to the orchestrator. Symmetric with all
+  other Eidolons in the roster. Verification is `Read`-only (no Bash required).
+
+---
+
 ## [1.10.0] - 2026-06-03 — Scatter-Gather Locate mode + delta re-scout (G1 operationalization)
 
 ### Added
