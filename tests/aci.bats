@@ -1052,7 +1052,7 @@ esac'
     grep -E '^tools:' .claude/agents/atlas.md
     return 1
   }
-  grep -qE '^tools: Read, Grep, Glob, Bash\(rg:\*\), Bash\(git log:\*\), Bash\(git show:\*\)$' .claude/agents/atlas.md || {
+  grep -qE '^tools: Read, Grep, Glob, Write, Bash\(rg:\*\), Bash\(git log:\*\), Bash\(git show:\*\), Bash\(git diff:\*\), Bash\(shasum:\*\), Bash\(wc:\*\)$' .claude/agents/atlas.md || {
     echo "Remove did not produce the canonical BASE tools line:"
     grep -E '^tools:' .claude/agents/atlas.md
     return 1

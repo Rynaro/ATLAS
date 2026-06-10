@@ -1465,11 +1465,11 @@ unwire_codex() {
 _SUBAGENT_FILE="./.claude/agents/atlas.md"
 
 _subagent_canonical_tools_base() {
-  printf 'Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)'
+  printf 'Read, Grep, Glob, Write, Bash(rg:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(shasum:*), Bash(wc:*)'
 }
 
 _subagent_canonical_tools_with_mcp() {
-  printf 'Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*), '
+  printf 'Read, Grep, Glob, Write, Bash(rg:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(shasum:*), Bash(wc:*), '
   printf 'mcp__atlas-aci__view_file, mcp__atlas-aci__list_dir, '
   printf 'mcp__atlas-aci__search_text, mcp__atlas-aci__search_symbol, '
   printf 'mcp__atlas-aci__graph_query, mcp__atlas-aci__test_dry_run, '

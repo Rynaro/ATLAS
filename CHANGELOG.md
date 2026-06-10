@@ -7,6 +7,29 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.12.1] - 2026-06-10 — Expand agent tools allowlist (Write + git diff + shasum + wc)
+
+### Changed
+
+- **`install.sh` / `.claude/agents/atlas.md` / `commands/aci.sh`:** tools line extended
+  from `Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)` to
+  `Read, Grep, Glob, Write, Bash(rg:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(shasum:*), Bash(wc:*)`.
+  Rationale: read-only is a **codebase** refusal (ATLAS never edits source), not an
+  artifact one — ATLAS emits `scout-report.md`, `mission.md`, `findings.md` itself
+  (requires `Write`); `git diff` powers rescout delta mode (range diffs); `shasum`/`wc`
+  let ATLAS fill its own ECL envelope integrity fields without parent transcription.
+  `mcp__crystalium__*` excluded — nexus wiring appends it. `Edit` excluded — ATLAS emits
+  fresh artifacts, never mutates existing files.
+- **`tests/helpers.bash`:** `seed_claude_atlas_subagent` fixture updated to match new
+  BASE tools line.
+- **`tests/aci.bats`:** SUB-4 grep assertion updated to match new BASE tools line.
+
+### Notes
+
+- `EIIS_VERSION` and `ECL_VERSION` unchanged.
+
+---
+
 ## [1.12.0] - 2026-06-10 — Version-stamp hygiene + canonical skill template
 
 ### Changed
