@@ -1,11 +1,19 @@
 ---
 name: atlas-verify-incoming
-description: "Load when reading any upstream artefact handed off to ATLAS that carries a sibling .envelope.json. BLOCKING per ECL §6.2.2: the orchestrator MUST have verified the envelope's SHA-256 (eidolons verify-envelope --block / eidolons run --verify) and recorded a verify_pass before dispatch. If no verify_pass exists for the message_id, or a verify_fail is present, REFUSE to process the payload and hand back to the orchestrator. Symmetric receiver gate — every Eidolon enforces it identically."
-methodology: ATLAS
-methodology_version: "1.0"
+description: Receiver-side ECL integrity gate (blocking, symmetric). Refuses to process any upstream artefact whose sibling .envelope.json lacks a verify_pass trace event from the orchestrator. Use when reading any upstream artefact handed off to ATLAS that carries a sibling .envelope.json. Symmetric across all Eidolons — every Eidolon enforces it identically per ECL §6.2.2.
+metadata:
+  methodology: ATLAS
 ---
 
 # Verify-Incoming Skill — ATLAS (blocking, symmetric)
+
+## When to use
+
+Load this skill when reading any upstream artefact at path `P` where a sibling
+file `${P%.*}.envelope.json` exists in the same directory. If no `.envelope.json`
+sibling exists, skip the gate silently and process normally.
+
+---
 
 Receiver-side integrity gate for inbound ECL hand-offs. When an upstream
 artefact arrives with a sibling `.envelope.json`, ATLAS MUST NOT process the
@@ -147,12 +155,12 @@ envelope is unparseable, use `unknown`.
 
 **verify_pass:**
 ```json
-{"ts":"<RFC3339>","event":"verify_pass","message_id":"<uuid>","thread_id":"<uuid>","from":"<eidolon>@<version>","to":"atlas@1.0","performative":"<performative>","integrity_method":"sha256"}
+{"ts":"<RFC3339>","event":"verify_pass","message_id":"<uuid>","thread_id":"<uuid>","from":"<eidolon>@<version>","to":"atlas@<version>","performative":"<performative>","integrity_method":"sha256"}
 ```
 
 **verify_fail:**
 ```json
-{"ts":"<RFC3339>","event":"verify_fail","message_id":"<uuid>","thread_id":"<uuid>","from":"<eidolon>@<version>","to":"atlas@1.0","integrity_method":"sha256","verify_failure_code":"<CODE>","decision":"refused"}
+{"ts":"<RFC3339>","event":"verify_fail","message_id":"<uuid>","thread_id":"<uuid>","from":"<eidolon>@<version>","to":"atlas@<version>","integrity_method":"sha256","verify_failure_code":"<CODE>","decision":"refused"}
 ```
 
 ---

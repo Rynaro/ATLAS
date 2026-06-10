@@ -1,14 +1,15 @@
 ---
 name: atlas-traverse
-description: Phase T (Traverse) — deterministic structural mapping of a codebase. Use when a mission.md brief exists and before any meaning-based search. Zero LLM calls during retrieval; only symbol index, AST, ripgrep, and git log. Emits map.md with entrypoints, modules, call graph, and heatmap.
-when_to_use: After mission.md is valid; before Phase L (Locate). Trigger phrases — "map the repo", "what are the entrypoints", "build the call graph", "list all routes/workers/CLIs".
+description: Phase T (Traverse) — deterministic structural mapping of a codebase. Zero LLM calls during retrieval; only symbol index, AST, ripgrep, and git log. Emits map.md with entrypoints, modules, call graph, and heatmap. Use after mission.md is valid and before any meaning-based search. Trigger phrases — "map the repo", "what are the entrypoints", "build the call graph", "list all routes/workers/CLIs".
 allowed-tools: view_file list_dir search_text search_symbol graph_query
-methodology: ATLAS
-methodology_version: "1.0"
-phase: T
+metadata:
+  methodology: ATLAS
+  phase: T
 ---
 
 # SKILL: Traverse — structural mapping (Phase T)
+
+## When to use
 
 **Load when:** Phase A (Assess) has produced a valid `mission.md` and you are
 about to emit `map.md`.

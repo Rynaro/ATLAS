@@ -1,6 +1,6 @@
 {
   "eidolon": "atlas",
-  "version": "1.7.2",
+  "version": "1.12.0",
   "methodology": "ATLAS",
   "canonical_inventory_strict": true,
   "installed_at": "2026-05-26T00:00:00Z",
@@ -30,13 +30,22 @@
     {"path": ".claude/skills/atlas-abstract/SKILL.md","sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": "./.eidolons/atlas/skills/synthesize.md",     "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": ".claude/skills/atlas-synthesize/SKILL.md",   "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/scatter.md",        "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-scatter/SKILL.md",      "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/rescout.md",        "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-rescout/SKILL.md",      "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/verify-incoming.md","sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-verify-incoming/SKILL.md","sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": ".claude/agents/atlas.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"}
   ],
   "skills": [
     {"name": "traverse",  "source_path": ".eidolons/atlas/skills/traverse.md",  "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-traverse/SKILL.md",  "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
     {"name": "locate",    "source_path": ".eidolons/atlas/skills/locate.md",    "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-locate/SKILL.md",    "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
     {"name": "abstract",  "source_path": ".eidolons/atlas/skills/abstract.md",  "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-abstract/SKILL.md",  "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
-    {"name": "synthesize","source_path": ".eidolons/atlas/skills/synthesize.md","source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-synthesize/SKILL.md","vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+    {"name": "synthesize",     "source_path": ".eidolons/atlas/skills/synthesize.md",     "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-synthesize/SKILL.md",     "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "scatter",        "source_path": ".eidolons/atlas/skills/scatter.md",        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-scatter/SKILL.md",        "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "rescout",        "source_path": ".eidolons/atlas/skills/rescout.md",        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-rescout/SKILL.md",        "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "verify-incoming","source_path": ".eidolons/atlas/skills/verify-incoming.md","source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-verify-incoming/SKILL.md","vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
   ],
   "handoffs_declared": {
     "upstream": [],

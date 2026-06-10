@@ -1,14 +1,15 @@
 ---
 name: atlas-rescout
-description: Incremental delta re-scout (Phase A/T mode) — a READ-ONLY, evidence-anchored RE-RUN that reuses a prior scout-report + its Memex store + a git-diff range to re-probe ONLY the changed surface, carrying unchanged findings forward verbatim. Narrows (does NOT close) the always-on-live-index staleness gap. Use when a prior ATLAS mission exists for this surface and the code has changed since.
-when_to_use: Phase A intake when a prior scout-report.md + Memex store exist for the same surface and the question is "what changed since the last scout" or "re-verify the prior map against HEAD". Recall already surfaces the prior scout-report. Do NOT use for a first-time scout (run the full A→T→L→A→S cycle instead).
+description: Incremental delta re-scout (Phase A/T mode) — a READ-ONLY, evidence-anchored re-run that reuses a prior scout-report + its Memex store + a git-diff range to re-probe ONLY the changed surface, carrying unchanged findings forward verbatim. Narrows (does NOT close) the always-on-live-index staleness gap. Use at Phase A intake when a prior scout-report.md + Memex store exist for the same surface and the question is "what changed since the last scout" or "re-verify the prior map against HEAD". Do NOT use for a first-time scout (run the full A→T→L→A→S cycle instead).
 allowed-tools: search_symbol graph_query search_text view_file memex_read
-methodology: ATLAS
-methodology_version: "1.0"
-phase: A
+metadata:
+  methodology: ATLAS
+  phase: A
 ---
 
 # SKILL: Delta re-scout (incremental mode)
+
+## When to use
 
 **Load when:** a prior `scout-report.md` + its Memex excerpt store exist for
 this surface, and you need to re-establish currency against a newer commit
