@@ -7,7 +7,35 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [1.12.0] - 2026-06-10 — Version-stamp hygiene + canonical skill template
+
+### Changed
+
+- **`install.sh`:** `EIDOLON_VERSION` 1.11.0 → 1.12.0.
+- **`AGENTS.md`:** frontmatter `version:` 1.11.0 → 1.12.0.
+- **`examples/install.manifest.json`:** version 1.7.2 → 1.12.0; added missing
+  `scatter`, `rescout`, and `verify-incoming` entries to both `files_written[]`
+  and `skills[]` arrays to match actual `install.sh` `wire_skill` calls (EIIS I5).
+- **`skills/*.md` (7 files):** migrated to canonical EIIS skill template — `methodology`
+  and `phase` moved under `metadata:` map; `methodology_version` key dropped
+  (drift surface, nothing reads it); `when_to_use` content folded into `description`
+  and preserved as `## When to use` body section; added missing H1 title to
+  `scatter.md` and `verify-incoming.md`. Methodology body content preserved verbatim.
+- **`skills/verify-incoming.md`:** trace-event examples changed `atlas@1.0` →
+  `atlas@<version>` placeholder form per spec (no release version strings in skill bodies).
+- **`tests/helpers.bash`:** test fixture `seed_claude_atlas_subagent` migrated from
+  old frontmatter shape (`when_to_use` / top-level `methodology` / `methodology_version`)
+  to new canonical shape (`metadata:` block).
+
+### Notes
+
+- `EIIS_VERSION` and `ECL_VERSION` unchanged. `agent.md` body unchanged (≤1000-token
+  budget gate holds). ECL prose items (`SPEC.md:405`, trace version strings in skill
+  bodies other than the `atlas@1.0` placeholder fix) left verbatim — ecosystem-coordinated.
+
+---
+
+## [1.11.0] - 2026-06-04 — Blocking symmetric verify-incoming gate
 
 ### Added
 

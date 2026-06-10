@@ -1,14 +1,15 @@
 ---
 name: atlas-scatter
-description: Phase L sub-mode (Scatter-Gather Locate) — TRANCE-gated parallel fan-out of read-only Locate probes across topologically-disjoint module clusters, each in a clean-context subagent, merged back into findings.md via a deterministic dedup contract. Use ONLY when map.md surface is large (>5 modules OR >25 files) AND ≥2 disjoint DECISION_TARGET sub-questions exist. Never default; serial Locate is the standard path.
-when_to_use: Phase L, after map.md is complete, when BOTH the surface-size flag AND the disjoint-subquestion flag hold. Trigger phrases — "audit across all modules", "trace these N independent flows", "scout this large surface in parallel". Do NOT load for a single sub-question, tightly-coupled sub-questions, or a tight budget.
+description: Phase L sub-mode (Scatter-Gather Locate) — TRANCE-gated parallel fan-out of read-only Locate probes across topologically-disjoint module clusters, each in a clean-context subagent, merged back into findings.md via a deterministic dedup contract. Never default; serial Locate is the standard path. Use ONLY when map.md surface is large (>5 modules OR >25 files) AND ≥2 disjoint DECISION_TARGET sub-questions exist. Trigger phrases — "audit across all modules", "trace these N independent flows", "scout this large surface in parallel". Do NOT load for a single sub-question, tightly-coupled sub-questions, or a tight budget.
 allowed-tools: search_symbol graph_query search_text view_file test_dry_run memex_read
-methodology: ATLAS
-methodology_version: "1.0"
-phase: L
+metadata:
+  methodology: ATLAS
+  phase: L
 ---
 
 # SKILL: Scatter-Gather Locate (Phase L sub-mode)
+
+## When to use
 
 **Load when:** `map.md` is complete AND the activation trigger below fires.
 This is the operationalized G1 TRANCE form of the diffuse scatter primitives
