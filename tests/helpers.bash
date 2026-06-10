@@ -247,7 +247,7 @@ seed_claude_atlas_subagent() {
 ---
 name: atlas
 description: Test fixture subagent (frontmatter-only).
-tools: Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)
+tools: Read, Grep, Glob, Write, Bash(rg:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(shasum:*), Bash(wc:*)
 role: Explorer/Scout
 handoffs: [spectra, apivr]
 metadata:

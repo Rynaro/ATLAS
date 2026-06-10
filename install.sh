@@ -5,7 +5,7 @@ set -euo pipefail
 
 EIDOLON_NAME="atlas"
 EIDOLON_SLUG="atlas"
-EIDOLON_VERSION="1.12.0"
+EIDOLON_VERSION="1.12.1"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -612,7 +612,7 @@ if hosts_include "claude-code" && [[ "$MANIFEST_ONLY" != "true" ]]; then
 name: atlas
 description: Read-only codebase scout and Plan-Mode methodology. Use when the user asks \"where is X\", \"how does Y work\", \"trace the flow of Z\", \"audit Q\", or any exploratory / pre-planning question. Runs the five-phase ATLAS pipeline (Assess → Traverse → Locate → Abstract → Synthesize) and emits a scout-report.md. Refuses write verbs (edit, fix, refactor, migrate, deploy) and hands off to SPECTRA or APIVR-Δ.
 when_to_use: Any codebase exploration, impact analysis, or scout mission; before SPECTRA (spec) or APIVR-Δ (implementation); when the user asks for \"plan mode\" or a decision-ready summary of an unfamiliar area.
-tools: Read, Grep, Glob, Bash(rg:*), Bash(git log:*), Bash(git show:*)
+tools: Read, Grep, Glob, Write, Bash(rg:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(shasum:*), Bash(wc:*)
 methodology: ATLAS
 methodology_version: \"1.0\"
 role: Explorer/Scout — read-only codebase intelligence

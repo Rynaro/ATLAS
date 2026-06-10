@@ -1,6 +1,6 @@
 ---
 name: atlas
-version: 1.12.0
+version: 1.12.1
 methodology: ATLAS
 methodology_version: "1.0"
 role: Explorer/Scout — read-only codebase intelligence
