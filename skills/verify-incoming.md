@@ -3,6 +3,7 @@ name: atlas-verify-incoming
 description: Receiver-side ECL integrity gate (blocking, symmetric). Refuses to process any upstream artefact whose sibling .envelope.json lacks a verify_pass trace event from the orchestrator. Use when reading any upstream artefact handed off to ATLAS that carries a sibling .envelope.json. Symmetric across all Eidolons — every Eidolon enforces it identically per ECL §6.2.2.
 metadata:
   methodology: ATLAS
+  phase: cross-cutting
 ---
 
 # Verify-Incoming Skill — ATLAS (blocking, symmetric)
@@ -15,12 +16,14 @@ sibling exists, skip the gate silently and process normally.
 
 ---
 
-Receiver-side integrity gate for inbound ECL hand-offs. When an upstream
-artefact arrives with a sibling `.envelope.json`, ATLAS MUST NOT process the
-payload unless its SHA-256 integrity has been **verified and passed**. This is
-the **blocking** posture mandated by ECL §6.2.2 ("a receiver SHALL NOT process a
-payload whose integrity tag does not match"). It is **symmetric**: every Eidolon
-in the roster ships this same gate, so no hand-off edge can silently skip it.
+Receiver-side integrity gate for inbound ECL hand-offs, converged on the
+**ECL v2.0** blocking gate shape (canonical reference: Kupo's
+`skills/verify-incoming.md`). When an upstream artefact arrives with a
+sibling `.envelope.json`, ATLAS MUST NOT process the payload unless its
+SHA-256 integrity has been **verified and passed**. This is the **blocking**
+posture mandated by ECL v2.0 §6.2.2 ("a receiver SHALL NOT process a payload
+whose integrity tag does not match"). It is **symmetric**: every Eidolon in
+the roster ships this same gate, so no hand-off edge can silently skip it.
 
 > **Posture change (vs. earlier opt-in warn-only):** previous versions logged a
 > warning and processed the payload anyway. That is now superseded. On an
@@ -141,7 +144,8 @@ On **any** integrity or contract failure:
 
 Failure codes: `INTEGRITY_MISMATCH`, `UNVERIFIED` (no `verify_pass` on record),
 `SCHEMA_INVALID`, `UNDECLARED_EDGE`, `PERFORMATIVE_NOT_ALLOWED`,
-`ARTIFACT_KIND_NOT_ALLOWED`.
+`ARTIFACT_KIND_NOT_ALLOWED`, `CONTEXT_OVER_BUDGET`, `MISSING_REQUIRED_SECTION`
+(full ECL v2.0 §5.3 set).
 
 On success: append `verify_pass`, then proceed with the payload.
 
@@ -172,11 +176,11 @@ envelope is unparseable, use `unknown`.
 - **Symmetric.** All six Eidolons ship this gate with identical semantics; the
   only per-Eidolon variation is the inbound-edge table above.
 - **Mechanical gate, single source of truth.** The SHA-256 comparison is the
-  nexus `eidolons verify-envelope` verb (ECL §6.2.2) — never re-implemented or
-  LLM-estimated in this skill.
+  nexus `eidolons verify-envelope` verb (ECL v2.0 §6.2.2) — never
+  re-implemented or LLM-estimated in this skill.
 - **Read-only enforcement.** The receiver needs only `Read` to consult the
   trace; this is why the gate is symmetric across tool-less Eidolons.
 
 ---
 
-*Verify-Incoming Skill — blocking, symmetric, mechanical-gate-backed (ECL §6.2.2)*
+*Verify-Incoming Skill — blocking, symmetric, mechanical-gate-backed (ECL v2.0 §6.2.2)*

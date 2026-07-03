@@ -1,6 +1,6 @@
 {
   "eidolon": "atlas",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "methodology": "ATLAS",
   "canonical_inventory_strict": true,
   "installed_at": "2026-05-26T00:00:00Z",
@@ -21,7 +21,7 @@
     {"path": "./.eidolons/atlas/schemas/scout-report.v1.json",               "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "other", "mode": "created"},
     {"path": "./.eidolons/atlas/schemas/install.manifest.v1.json",           "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "other", "mode": "created"},
     {"path": "./.eidolons/atlas/schemas/scout-report-profile.v1.json",       "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "other", "mode": "created"},
-    {"path": "./.eidolons/atlas/schemas/ecl-envelope.v1.json",               "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "other", "mode": "created"},
+    {"path": "./.eidolons/atlas/schemas/ecl-envelope.v2.json",               "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "other", "mode": "created"},
     {"path": "./.eidolons/atlas/skills/traverse.md",  "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": ".claude/skills/atlas-traverse/SKILL.md","sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": "./.eidolons/atlas/skills/locate.md",    "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
@@ -36,6 +36,8 @@
     {"path": ".claude/skills/atlas-rescout/SKILL.md",      "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": "./.eidolons/atlas/skills/verify-incoming.md","sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": ".claude/skills/atlas-verify-incoming/SKILL.md","sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": "./.eidolons/atlas/skills/esl-hop.md",          "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
+    {"path": ".claude/skills/atlas-esl-hop/SKILL.md",        "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "skill", "mode": "created"},
     {"path": ".claude/agents/atlas.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "role": "dispatch", "mode": "created"}
   ],
   "skills": [
@@ -45,14 +47,15 @@
     {"name": "synthesize",     "source_path": ".eidolons/atlas/skills/synthesize.md",     "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-synthesize/SKILL.md",     "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
     {"name": "scatter",        "source_path": ".eidolons/atlas/skills/scatter.md",        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-scatter/SKILL.md",        "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
     {"name": "rescout",        "source_path": ".eidolons/atlas/skills/rescout.md",        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-rescout/SKILL.md",        "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
-    {"name": "verify-incoming","source_path": ".eidolons/atlas/skills/verify-incoming.md","source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-verify-incoming/SKILL.md","vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+    {"name": "verify-incoming","source_path": ".eidolons/atlas/skills/verify-incoming.md","source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-verify-incoming/SKILL.md","vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"name": "esl-hop",        "source_path": ".eidolons/atlas/skills/esl-hop.md",        "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "vendor_path": ".claude/skills/atlas-esl-hop/SKILL.md",        "vendor_sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
   ],
   "handoffs_declared": {
     "upstream": [],
     "downstream": ["spectra", "apivr-delta"]
   },
   "token_budget": {
-    "entry": 980,
+    "entry": 998,
     "working_set_target": 1000
   },
   "ecl_version_emitted": "2.0",

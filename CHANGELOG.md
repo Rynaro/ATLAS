@@ -7,6 +7,83 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.13.0] - 2026-07-03 — ECL 2.0 adoption sweep (drift kill + ISE + discover hop)
+
+### Added
+
+- **`schemas/ecl-envelope.v2.json`** — vendored copy of the central
+  `eidolons-ecl/schemas/envelope.v2.json`, self-contained (performative enum
+  and `context_delta` inlined, matching this repo's existing vendoring
+  convention). Adds the `ise` (Intent, Source, Entitlement) trust-hierarchy
+  block per ECL v2.0 §6.5. Replaces `schemas/ecl-envelope.v1.json` (removed).
+- **`skills/esl-hop.md`** — new opt-in ESL (Eidolons Spec Lifecycle)
+  **discover hop**. When a scout mission surfaces a change-worthy finding
+  (defect, spec/impl drift, or gap) in an ESL-enabled project (`.spectra/`
+  present), Phase S frames the scout-report + envelope it already emits as a
+  proposal to open an ESL change at `proposed`, and hands it to SPECTRA over
+  the unmodified `atlas-to-spectra` edge. ATLAS never calls a tonberry write
+  verb itself (refusal boundary intact) — SPECTRA's own `esl-hop` owns
+  `propose`/`specify` on receipt. Wired into `agent.md`'s skill-load table
+  (additive row) and `install.sh` (`wire_skill "esl-hop"`,
+  `build_skills_json`).
+- **`templates/scout-report.envelope.json`:** `ise` block added —
+  `assertion_grade: "self-attested"` (scout findings are evidence-anchored
+  per I-7 but not externally verified by another Eidolon),
+  `receiver_authorization: {auto_route: true, auto_merge: false, auto_deploy:
+  false}`, `provenance.methodology_version: "atlas-<version>"`.
+
+### Changed
+
+- **`envelope_version`:** `"1.0"` → `"2.0"` in
+  `templates/scout-report.envelope.json`.
+- **`install.sh`:** `EIDOLON_VERSION` 1.12.1 → 1.13.0; schema copy path
+  `schemas/ecl-envelope.v1.json` → `schemas/ecl-envelope.v2.json`.
+- **Drift kill — stale "ECL v1.0" prose** fixed in `SPEC.md` (I-9, §2.5
+  outputs, §7 Versioning), `CLAUDE.md` (schema-validation note, versioning
+  policy line), `templates/scout-report.md` (§7.1 heading + validation
+  target), `skills/synthesize.md` (envelope section heading, performative
+  reference, exit-gate schema path), `DESIGN-RATIONALE.md` (I-9 decision +
+  rationale). All now read "ECL v2.0" / `ecl-envelope.v2.json`, matching the
+  `ECL_VERSION` file (already `2.0`, previously undeclared as drift against
+  these prose refs).
+- **`skills/verify-incoming.md`:** converged on the canonical ECL v2.0
+  blocking-gate shape (reference: `Kupo/skills/verify-incoming.md`) —
+  `metadata.phase: cross-cutting` added; explicit "ECL v2.0 §6.2.2"
+  version-labeling in the posture statement and closing tagline; failure-code
+  list completed to the full ECL v2.0 §5.3 set (`CONTEXT_OVER_BUDGET`,
+  `MISSING_REQUIRED_SECTION` added). ATLAS's own accepted-artefact table
+  (inbound edges from `vigil`, `forge`) preserved verbatim.
+- **`agent.md`:** `version: 1.13.0` frontmatter field added (previously
+  absent — now matches `AGENTS.md` and peer-Eidolon convention); skill-load
+  table gains one additive row for `skills/esl-hop.md`. Still ≤1000-token
+  budget (998 tokens).
+- **`AGENTS.md`:** frontmatter `version:` 1.12.1 → 1.13.0.
+- **`SPEC.md`:** header gains a release-version stamp (`v1.13.0`, tracked
+  separately from the `v1.0` methodology-spec version); §6 "Relationship to
+  other agents" gains a short ESL discover-hop paragraph.
+- **`README.md`:** `## Status` section gains the single release-version
+  mention (`v1.13.0`), distinct from the existing `v1.0` methodology-spec
+  badge (unchanged).
+- **`examples/install.manifest.json`:** version 1.12.1 → 1.13.0; schema path
+  `ecl-envelope.v1.json` → `ecl-envelope.v2.json`; `esl-hop` entries added to
+  both `files_written[]` and `skills[]`; `token_budget.entry` 980 → 998.
+
+### Removed
+
+- **`schemas/ecl-envelope.v1.json`** — superseded by
+  `schemas/ecl-envelope.v2.json`.
+
+### Notes
+
+- `EIIS_VERSION` (1.4) unchanged. `ECL_VERSION` unchanged (already `2.0` —
+  this release is drift remediation against prose that hadn't caught up, not
+  a version-file bump).
+- No footer/tagline version-number stamps were added outside the five
+  canonical homes (`install.sh` `EIDOLON_VERSION`, `agent.md`+`AGENTS.md`
+  frontmatter, `SPEC.md` header, `README.md` single mention, this entry).
+
+---
+
 ## [1.12.1] - 2026-06-10 — Expand agent tools allowlist (Write + git diff + shasum + wc)
 
 ### Changed

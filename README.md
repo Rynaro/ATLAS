@@ -191,7 +191,9 @@ and labeled in the scout report. Each methodology is independently useful.
 ## Status
 
 **v1.0** — initial specification. Breaking changes to phase contracts or
-artifact schemas require a minor-version bump.
+artifact schemas require a minor-version bump. Current Eidolon release:
+**v1.13.0** (see [CHANGELOG.md](CHANGELOG.md)) — the release-version and
+methodology-spec-version axes are tracked separately.
 
 Implementations declare ATLAS version compatibility in their agent
 frontmatter (`methodology: ATLAS`, `methodology_version: 1.0`).
