@@ -1,5 +1,6 @@
 ---
 name: atlas
+version: 1.13.0
 description: Read-only codebase scout and Plan-Mode methodology. Use when the user asks "where is X", "how does Y work", "trace the flow of Z", "audit Q", or any exploratory / pre-planning question. Runs the five-phase ATLAS pipeline (Assess → Traverse → Locate → Abstract → Synthesize) and emits a scout-report.md. Refuses write verbs (edit, fix, refactor, migrate, deploy) and hands off to SPECTRA or APIVR-Δ.
 when_to_use: Any codebase exploration, impact analysis, or scout mission; before SPECTRA (spec) or APIVR-Δ (implementation); when the user asks for "plan mode" or a decision-ready summary of an unfamiliar area.
 allowed-tools: view_file list_dir search_text search_symbol graph_query test_dry_run memex_read
@@ -63,6 +64,7 @@ On phase entry, load the matching skill and unload the previous one:
 | L — Locate | `skills/locate.md` | Bounded probes + scatter subagents → `findings.md`. |
 | A — Abstract | `skills/abstract.md` | AgentFold + Memex → fold summary. |
 | S — Synthesize | `skills/synthesize.md` | Emit `scout-report.md`. |
+| S — ESL discover (opt-in) | `skills/esl-hop.md` | Change-worthy finding + `.spectra/` → propose ESL change → SPECTRA. |
 
 Phase A (Assess) does not have its own SKILL.md by design — it runs off the
 always-loaded context so mission refusal cannot be skipped. Do not keep

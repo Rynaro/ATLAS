@@ -5,7 +5,7 @@ set -euo pipefail
 
 EIDOLON_NAME="atlas"
 EIDOLON_SLUG="atlas"
-EIDOLON_VERSION="1.12.1"
+EIDOLON_VERSION="1.13.0"
 METHODOLOGY="ATLAS"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -355,7 +355,7 @@ if [[ "$MANIFEST_ONLY" != "true" ]]; then
   copy_file "schemas/scout-report.v1.json"              "${TARGET}/schemas/scout-report.v1.json"      "other"
   copy_file "schemas/install.manifest.v1.json"          "${TARGET}/schemas/install.manifest.v1.json"  "other"
   copy_file "schemas/scout-report-profile.v1.json"      "${TARGET}/schemas/scout-report-profile.v1.json" "other"
-  copy_file "schemas/ecl-envelope.v1.json"              "${TARGET}/schemas/ecl-envelope.v1.json"      "other"
+  copy_file "schemas/ecl-envelope.v2.json"              "${TARGET}/schemas/ecl-envelope.v2.json"      "other"
   # ECL envelope template — stored under schemas/ (§1.7.2: MAY vendor additional
   # JSON schemas; templates/ only allows .md per §1.7.1 whitelist).
   copy_file "templates/scout-report.envelope.json"      "${TARGET}/schemas/scout-report.envelope.json"   "other"
@@ -597,6 +597,7 @@ if [[ "$MANIFEST_ONLY" != "true" ]]; then
   wire_skill "scatter"
   wire_skill "rescout"
   wire_skill "verify-incoming"
+  wire_skill "esl-hop"
 fi
 
 # ---- claude-code (methodology-level subagent + optional shared dispatch) --- #
@@ -800,7 +801,7 @@ SPEC_FILE_PATH="${SPEC_FILE_PATH#./}"
 # Source-of-truth SHA is computed from the installed flat file.
 build_skills_json() {
   local result="" skill src_path vendor_path src_sha vendor_sha
-  for skill in traverse locate abstract synthesize scatter rescout verify-incoming; do
+  for skill in traverse locate abstract synthesize scatter rescout verify-incoming esl-hop; do
     src_path="${TARGET}/skills/${skill}.md"
     vendor_path=".claude/skills/${EIDOLON_SLUG}-${skill}/SKILL.md"
     if [ -f "${src_path}" ]; then

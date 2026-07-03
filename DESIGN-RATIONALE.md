@@ -165,18 +165,18 @@ most critical safety check) cannot be skipped even if a skill fails to load.
 
 ## I-9 — ECL-conformant handoffs
 
-**Decision:** Phase S MUST emit a v1.0 ECL envelope sidecar
+**Decision:** Phase S MUST emit a v2.0 ECL envelope sidecar
 (`scout-report.envelope.json`) adjacent to the `scout-report.md`. The
 envelope is a **terminal Phase-S artefact** — in the same class as the
 scout report itself — not a tool call. Envelope schema is vendored at
-`schemas/ecl-envelope.v1.json`; per-Eidolon profile at
-`schemas/scout-report-profile.v1.json`. ATLAS declares targeting ECL v1.0
+`schemas/ecl-envelope.v2.json`; per-Eidolon profile at
+`schemas/scout-report-profile.v1.json`. ATLAS declares targeting ECL v2.0
 via a `ECL_VERSION` file at the repo root. Adoption is opt-in; existing
 consumers may ignore the sidecar without loss of scout-report functionality.
 
 **Rationale:** Inter-Eidolon handoffs are currently implicit — ATLAS emits a
 freeform `<handoff>` XML block in the scout report, which downstream agents
-(SPECTRA, APIVR-Δ) parse by convention. ECL v1.0 (ECL §1, §3) standardises
+(SPECTRA, APIVR-Δ) parse by convention. ECL v2.0 (ECL §1, §3) standardises
 this: the envelope carries a machine-readable identity (`from`/`to`), a
 `performative` (`PROPOSE` for ATLAS→SPECTRA), and an integrity checksum
 (`sha256`) that downstream tooling can verify without re-reading the report.
@@ -188,8 +188,21 @@ per-Eidolon profile (ECL §3) provides a typed frontmatter contract
 (`scope.entrypoints`, `findings_count`, etc.) that lets the central ECL
 registry validate ATLAS handoffs without coupling to ATLAS's body schema.
 
+**ISE grade (ECL v2.0 §6.5) — why `self-attested`, not `validated` or
+`unverified`:** ATLAS's exit gate (`skills/synthesize.md`) mechanically checks
+every claim for a `FINDING-XXX` + `path:line` anchor before a scout report
+ships (I-7) — that is real internal validation, ruling out `unverified`.
+But no other Eidolon or external gate re-checks those claims before the
+envelope is emitted, ruling out `validated` (spec-mandated *external* gates)
+and `human-reviewed`. `self-attested` is the accurate middle grade: evidence
+is anchored, but the anchoring is ATLAS's own. `ise.receiver_authorization`
+is set to `{auto_route: true, auto_merge: false, auto_deploy: false}` for the
+same reason — SPECTRA may pull a scout report into its own intake
+automatically, but nothing downstream should merge or deploy on the strength
+of an unverified-by-a-third-party read-only exploration alone.
+
 **Source:** `ECL_VERSION`, `SPEC.md §1 I-9`, `SPEC.md §2.5`,
-ECL spec §1 (envelope shape) + §3 (per-Eidolon profile contracts).
+ECL spec §1 (envelope shape) + §3 (per-Eidolon profile contracts) + §6.5 (ISE).
 
 ---
 
@@ -291,3 +304,35 @@ of an inference, which both raises partition quality (truly disjoint clusters �
 low cross-branch dedup) and keeps the deterministic-first discipline intact.
 
 **Source:** `SPEC.md §1 I-3`, `skills/locate.md` (Tier-2), `tools/bounded-aci-spec.md §graph_query`.
+
+---
+
+## ESL discover hop — propose, never make
+
+**Decision:** Add `skills/esl-hop.md`, ATLAS's opt-in Eidolons Spec Lifecycle
+(ESL) hop. When a scout mission surfaces a change-worthy finding (a defect, a
+spec/impl drift, or a gap) in an ESL-enabled consumer project (`.spectra/`
+present), Phase S frames the `scout-report.md` + envelope it already emits as
+a proposal to open an ESL change at `proposed`, and hands it to SPECTRA over
+the existing, unmodified `atlas-to-spectra` edge. ATLAS never calls a
+tonberry write verb (`propose`, `transition`, `archive`, `verify`) itself —
+SPECTRA's own `esl-hop` owns `right_size → propose → specify` on receipt.
+
+**Rationale:** ATLAS is the furthest-upstream Eidolon in the ESL chain, and
+its P0 refusal boundary (read-only; no `edit`/`write`/`commit`/`deploy`/
+`migrate`/`refactor`/`fix`) is the single most safety-critical invariant in
+the whole methodology (I-1). Every other Eidolon's `esl-hop` is a *maker* or
+*checker* role bound to a tonberry write verb; giving ATLAS the same shape
+would mean acquiring a `mcp__tonberry__propose` call — a de facto write
+against `.spectra/changes/`, which is exactly the boundary ATLAS exists to
+never cross. The discover hop resolves this by making ATLAS's contribution
+purely evidentiary: it reuses the artifact and edge it already has (no new
+`artifact.kind`, no new contract), and lets SPECTRA — which already owns
+`proposed → specify` — be the one Eidolon that actually opens the
+`change.json` record. This keeps ESL adoption additive on both ends: ATLAS
+gains a discovery-to-lifecycle path without acquiring a single new tool, and
+SPECTRA's existing hop needs no change to receive it.
+
+**Source:** `skills/esl-hop.md`, `agent.md` (skill-load table, S phase row),
+`SPEC.md §6`, `contracts/atlas-to-spectra.yaml` (in `Rynaro/eidolons-ecl`,
+unmodified).

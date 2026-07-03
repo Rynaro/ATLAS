@@ -1,12 +1,12 @@
 {
-  "x_atlas_comment": "ECL v1.0 envelope sidecar. See ../ECL_VERSION for the targeted ECL version and the canonical spec at Rynaro/eidolons-ecl (spec/ecl-1.0.md). Validate this file against ../schemas/ecl-envelope.v1.json. Fill every <placeholder> before emitting.",
-  "envelope_version": "1.0",
+  "x_atlas_comment": "ECL v2.0 envelope sidecar. See ../ECL_VERSION for the targeted ECL version and the canonical spec at Rynaro/eidolons-ecl (spec/ecl-2.0.md). Validate this file against ../schemas/ecl-envelope.v2.json. Fill every <placeholder> before emitting.",
+  "envelope_version": "2.0",
   "message_id": "<uuid-v7>",
   "thread_id": "<uuid-v7-same-as-mission-thread>",
   "parent_id": null,
   "from": {
     "eidolon": "atlas",
-    "version": "<atlas-semver e.g. 1.5.0>"
+    "version": "<atlas-semver e.g. 1.13.0>"
   },
   "to": {
     "eidolon": "spectra",
@@ -30,6 +30,19 @@
   },
   "constraints": {
     "trust_level": "standard"
+  },
+  "ise": {
+    "assertion_grade": "self-attested",
+    "provenance": {
+      "methodology_version": "atlas-<atlas-semver e.g. 1.13.0>",
+      "tool_surface": ["<subset actually invoked, from: view_file|list_dir|search_text|search_symbol|graph_query|test_dry_run|memex_read>"],
+      "lateral_consults": []
+    },
+    "receiver_authorization": {
+      "auto_route": true,
+      "auto_merge": false,
+      "auto_deploy": false
+    }
   },
   "confidence": 0.5,
   "integrity": {

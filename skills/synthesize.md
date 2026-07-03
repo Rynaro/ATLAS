@@ -167,7 +167,7 @@ After `scout-report.md` is written, emit exactly one handoff block:
 
 Downstream tooling parses this block deterministically.
 
-### Envelope sidecar (ECL v1.0)
+### Envelope sidecar (ECL v2.0)
 
 Immediately after the `<handoff>` block, also emit a `scout-report.envelope.json`
 file adjacent to the scout report. This is a terminal Phase-S artefact in the
@@ -184,19 +184,46 @@ Key fields to populate:
   equivalent. The values MUST match.
 - `artifact.size_bytes` — byte count of the scout-report file
   (`wc -c < <file> | tr -d '[:space:]'`).
-- `from.version` — ATLAS SemVer at the time of emission (e.g. `"1.5.0"`).
+- `from.version` — ATLAS SemVer at the time of emission (e.g. `"1.13.0"`).
 - `to.eidolon` / `to.version` — primary handoff recipient (usually `"spectra"`).
   See `SPEC.md §6` for recipient mapping.
-- `performative` — `"PROPOSE"` for ATLAS→SPECTRA scout handoffs (ECL v1.0 §2).
+- `performative` — `"PROPOSE"` for ATLAS→SPECTRA scout handoffs (ECL v2.0 §2;
+  closed ten-performative set, unchanged from v1.0).
 - `objective` — one sentence ≤240 chars matching the mission GOAL.
 - `trace.host`, `trace.model`, `trace.ts` — fill from the active session context.
+
+**ISE block (ECL v2.0 §6.5, optional but always emitted by ATLAS):**
+
+- `ise.assertion_grade` — always `"self-attested"`. Scout-report claims are
+  evidence-anchored (I-7: every claim carries `path:line` + confidence tier)
+  but are ATLAS's own internal validation, not an externally-verified check by
+  another Eidolon — `self-attested` is the accurate grade, not `validated` and
+  not `unverified`.
+- `ise.provenance.methodology_version` — `"atlas-<version>"` (e.g.
+  `"atlas-1.13.0"`), pattern `^[a-z][a-z0-9-]*-\d+\.\d+\.\d+$`.
+- `ise.provenance.tool_surface` — optional; the subset of ATLAS's seven
+  read-only tools actually invoked this mission.
+- `ise.provenance.lateral_consults` — optional; record a FORGE consult here
+  if one occurred (`{"eidolon": "forge", "performative": "PROPOSE"}`).
+- `ise.receiver_authorization` — always
+  `{"auto_route": true, "auto_merge": false, "auto_deploy": false}`. SPECTRA
+  or APIVR-Δ MAY auto-route the scout report into their own intake without an
+  operator confirm, but MUST NOT auto-merge or auto-deploy anything on the
+  strength of a scout report alone (§6.5.3/§6.5.6 — receivers MUST NOT take an
+  action whose corresponding flag is `false`).
 
 Reference contract: `eidolons-ecl/contracts/atlas-to-spectra.yaml` (in the
 `Rynaro/eidolons-ecl` repo) defines the normative `from`/`to`/`edge_origin`/
 `performative` values for the ATLAS→SPECTRA edge.
 
-Validate the emitted envelope against `schemas/ecl-envelope.v1.json` before
+Validate the emitted envelope against `schemas/ecl-envelope.v2.json` before
 marking Phase S complete.
+
+**Change-worthy findings:** if this mission surfaced ≥1 finding that asserts a
+defect, a spec/impl drift, or a genuine gap, and the consumer project is
+ESL-enabled (`.spectra/` present), load `skills/esl-hop.md` before finalizing
+this section — it frames the ESL proposal inside the same `scout-report.md` +
+envelope you are already emitting (no new artefact).
 
 ### CRYSTALIUM ingest (memory persistence)
 
@@ -254,7 +281,8 @@ mark Phase S complete normally. Never hard-fail on absent CRYSTALIUM tools.
 - [ ] Every R-N in §4 has a concrete handoff label.
 - [ ] Every GAP-XXX from the fold appears in §5.
 - [ ] Handoff block emitted and well-formed.
-- [ ] Envelope sidecar emitted, schema-valid against `schemas/ecl-envelope.v1.json`, `integrity.sha256` matches payload.
+- [ ] Envelope sidecar emitted, schema-valid against `schemas/ecl-envelope.v2.json`, `integrity.sha256` matches payload.
+- [ ] `ise.assertion_grade: "self-attested"` present with `ise.receiver_authorization` set to `{auto_route: true, auto_merge: false, auto_deploy: false}`.
 - [ ] `mcp__crystalium__ingest` called with the envelope + payload (or CRYSTALIUM absent and skip noted).
 - [ ] `mcp__crystalium__session_end` called once (or CRYSTALIUM absent and skip noted).
 - [ ] Memex remains intact; downstream agents can dereference anchors.
