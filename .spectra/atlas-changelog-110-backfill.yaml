@@ -1,0 +1,206 @@
+spec_id: atlas-changelog-110-backfill
+title: "Backfill missing [1.1.0] entry in CHANGELOG.md"
+cycle: SPECTRA
+mode: retroactive-documentation
+risk: low
+status: ready-to-implement
+created: 2026-04-28
+target_repo: Rynaro/ATLAS
+target_branch: docs/changelog-110-backfill
+target_pr_title: "docs(changelog): backfill v1.1.0 entry"
+
+scope:
+  in:
+    - CHANGELOG.md  # one inserted section between [1.1.1] and [1.0.6]
+  out:
+    - commands/aci.sh
+    - install.sh
+    - ATLAS.md
+    - agent.md
+    - schemas/
+    - templates/
+    - tests/
+    - evals/
+    - any version bump
+    - any git tag
+    - any reformat of existing CHANGELOG entries
+
+inputs:
+  release_tag: v1.1.0
+  merge_commit: 75a4d65
+  implementation_commit: 7b24b8b
+  pr_branch: feat/aci-container-mode
+  pr_number: 11
+  release_date: "2026-04-28"
+  release_date_verify_cmd: "git log -1 --format=%ad --date=short 75a4d65"
+
+source_anchors:
+  - path: commands/aci.sh
+    lines: "1-80"
+    role: design-decisions-header-and-exit-codes
+  - path: commands/aci.sh
+    lines: "154-192"
+    role: flag-parsing-for-container-and-runtime
+  - path: commands/aci.sh
+    lines: "342-377"
+    role: D1-always-prompt-runtime-selection
+  - path: commands/aci.sh
+    lines: "379-448"
+    role: D2-build-locally-and-D3-sha256-digest-pin
+  - path: commands/aci.sh
+    lines: "1318-1360"
+    role: main_install_container-flow
+  - path: ATLAS.md
+    lines: "307-326"
+    role: section-8-container-mode-prose
+  - path: CHANGELOG.md
+    lines: "10-32"
+    role: style-baseline-1.1.1
+  - path: CHANGELOG.md
+    lines: "34-41"
+    role: style-baseline-1.0.6
+  - path: CHANGELOG.md
+    lines: "47-95"
+    role: style-baseline-1.0.4
+
+decisions:
+  D1:
+    title: Release date
+    chosen: "2026-04-28"
+    rationale: "Merge commit 75a4d65 + pin-capture annotations in aci.sh:38-42,51 both reference 2026-04-28."
+    verify: "git log -1 --format=%ad --date=short 75a4d65"
+  D2:
+    title: Heading style
+    chosen: "## [1.1.0] - 2026-04-28 — <summary>"
+    rationale: "Matches [1.1.1] (newest entry) ASCII-dash date separator + em-dash before summary."
+  D3:
+    title: One-line summary
+    chosen: "atlas-aci container-runtime mode (--container)"
+    rationale: "Mirrors implementation-commit subject and ATLAS.md §8 heading."
+  D4:
+    title: Subsection structure
+    chosen: ["Added", "Changed"]
+    rationale: "Feature release, no bugfixes. Matches [1.0.4] structure."
+  D5:
+    title: Self-contained vs. PR link
+    chosen: self-contained
+    rationale: "[1.0.6] and [1.0.4] precedent. PR #11 is in-repo; readers already have git history."
+    implementer_discretion: "May add [atlas#11] link-ref footer if preferred; not required."
+  D6:
+    title: Design-point treatment
+    chosen: inline-parenthetical
+    rationale: "Keep a Changelog only sanctions Added/Changed/Fixed/Removed/Deprecated/Security; design tags D1/D2/D3/F1 go inline like [1.0.6]'s 'EIIS v1.1 §4.1.0' and 'R2 mitigation' callouts."
+  D7:
+    title: Version-bump bullets
+    chosen: "Both EIDOLON_VERSION and ATLAS_VERSION lines, matching [1.0.4]"
+    rationale: "Documents the minor-version bump (1.0.6 → 1.1.0) and the local-image-tag coupling."
+
+acceptance_criteria:
+  - id: A1
+    text: "New ## [1.1.0] heading inserted between [1.1.1] and [1.0.6], matching D2 format exactly."
+  - id: A2
+    text: "Section contains exactly ### Added and ### Changed subsections."
+  - id: A3
+    text: "Added documents --container, --runtime, D1 always-prompt + exit 9, D2 local build, D3 sha256 digest pin, exit codes 7/8/9, F1 GHCR deferral."
+  - id: A4
+    text: "Changed documents EIDOLON_VERSION 1.0.6→1.1.0, ATLAS_VERSION 1.0.6→1.1.0, ATLAS_ACI_PIN/REF capture date 2026-04-28."
+  - id: A5
+    text: "No file other than CHANGELOG.md is modified; no existing CHANGELOG section is reworded."
+  - id: A6
+    text: "markdownlint CHANGELOG.md introduces no new violations vs. main."
+  - id: A7
+    text: "Wording does not contradict commands/aci.sh:1-80 nor ATLAS.md §8."
+
+validation_gates:
+  - id: G1
+    desc: "Diff = one file, additions only"
+    cmd: "git diff --stat CHANGELOG.md"
+  - id: G2
+    desc: "Heading is canonical"
+    cmd: "grep -n '^## \\[1.1.0\\]' CHANGELOG.md"
+  - id: G3
+    desc: "Order: 1.1.1 then 1.1.0 then 1.0.6"
+    cmd: "grep -n '^## \\[' CHANGELOG.md"
+  - id: G4
+    desc: "Heading date matches merge-commit date"
+    cmd: "git log -1 --format=%ad --date=short 75a4d65"
+  - id: G5
+    desc: "All three exit codes (7,8,9) appear"
+    cmd: "grep -E 'exit (code )?[789]' CHANGELOG.md"
+  - id: G6
+    desc: "Both flags --container and --runtime appear"
+    cmd: "grep -E '\\-\\-(container|runtime)' CHANGELOG.md"
+  - id: G7
+    desc: "Version-bump bullets present"
+    cmd: "grep -E 'EIDOLON_VERSION.*1\\.0\\.6.*1\\.1\\.0' CHANGELOG.md"
+  - id: G8
+    desc: "No broken link refs introduced (advisory)"
+    cmd: "markdownlint CHANGELOG.md"
+
+rubric:
+  pass_threshold: 9
+  zero_dim_fails: true
+  dimensions:
+    placement:
+      0: "Wrong section / wrong order"
+      1: "Correct location, heading style off"
+      2: "Correct location + matches [1.1.1] heading style"
+    completeness:
+      0: "Missing one or more flags or exit codes"
+      1: "All flags, exit codes partial"
+      2: "All flags + all three exit codes + D1/D2/D3/F1 tags"
+    fidelity:
+      0: "Contradicts commands/aci.sh"
+      1: "Generic, non-contradictory"
+      2: "Verbatim-aligned with aci.sh + ATLAS.md §8"
+    style:
+      0: "New format introduced"
+      1: "Voice clashes with adjacent entries"
+      2: "Matches [1.0.6] / [1.0.4] voice and casing"
+    scope_discipline:
+      0: "Edits other files"
+      1: "Reformats unrelated CHANGELOG entries"
+      2: "Only the new section is added"
+
+stories:
+  - id: S1
+    title: "Insert [1.1.0] section into CHANGELOG.md"
+    actor: implementer
+    deliverable: "Single commit on branch docs/changelog-110-backfill that adds the verbatim block from the spec's §A artifact between [1.1.1] and [1.0.6]."
+    estimated_effort: "5 minutes"
+    blockers: []
+    validation:
+      - G1
+      - G2
+      - G3
+      - G5
+      - G6
+      - G7
+
+handoffs:
+  upstream:
+    - role: scout
+      provided: "Brief identifying the missing [1.1.0] entry, anchor lines in commands/aci.sh and ATLAS.md, and the wording in the eidolons-nexus CHANGELOG to mirror."
+  downstream:
+    - role: implementer (APIVR-Δ or human)
+      receives: "This spec + the verbatim CHANGELOG block in §A."
+      action: "Open branch docs/changelog-110-backfill, paste the block at the documented location, verify the date with the cmd in inputs.release_date_verify_cmd, push, open PR."
+
+out_of_scope_explicit:
+  - "Modifying commands/aci.sh, install.sh, ATLAS.md, schemas/, templates/, tests/, evals/, agent.md."
+  - "Bumping EIDOLON_VERSION or ATLAS_VERSION."
+  - "Creating, moving, or recreating the v1.1.0 git tag."
+  - "Reordering or rewording any existing CHANGELOG entry."
+  - "Adding ### Fixed or ### Verified subsections to the new entry."
+  - "Resolving F1 (GHCR pull deferral) — the entry restates F1, it does not close it."
+
+risks:
+  - id: R1
+    desc: "Date mismatch between annotation (2026-04-28) and actual merge commit timestamp."
+    mitigation: "Implementer must run `git log -1 --format=%ad --date=short 75a4d65` and trust git over the spec on conflict."
+  - id: R2
+    desc: "Stylistic drift from [1.1.1] / [1.0.6]."
+    mitigation: "The §A artifact is verbatim-ready. Copy-paste, do not paraphrase."
+  - id: R3
+    desc: "Implementer scope-creeps into reformatting other CHANGELOG entries."
+    mitigation: "G1 (diff stat = additions only) catches this in PR review."
