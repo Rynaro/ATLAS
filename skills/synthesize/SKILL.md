@@ -221,7 +221,7 @@ marking Phase S complete.
 
 **Change-worthy findings:** if this mission surfaced ≥1 finding that asserts a
 defect, a spec/impl drift, or a genuine gap, and the consumer project is
-ESL-enabled (`.spectra/` present), load `skills/esl-hop.md` before finalizing
+ESL-enabled (`.spectra/` present), load `skills/esl-hop/SKILL.md` before finalizing
 this section — it frames the ESL proposal inside the same `scout-report.md` +
 envelope you are already emitting (no new artefact).
 

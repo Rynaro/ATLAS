@@ -69,7 +69,7 @@ atlas/
 ├── INSTALL.md                  # cross-platform installation guide
 ├── AGENTS.md                   # open-standard rule set (Copilot/Cursor/OpenCode)
 ├── SPEC.md                     # methodology specification (authoritative)
-├── agent.md                    # always-loaded agent profile (≤1000 tokens)
+├── PERSONA.md                    # always-loaded agent profile (≤1000 tokens)
 │
 ├── .github/
 │   └── copilot-instructions.md # GitHub Copilot primary entry point
@@ -145,7 +145,7 @@ ln -sf .atlas/AGENTS.md AGENTS.md
 mkdir -p .claude/skills .claude/agents && \
   for p in traverse locate abstract synthesize; do \
     ln -sf ../../.atlas/skills/$p .claude/skills/atlas-$p; done && \
-  cp .atlas/agent.md .claude/agents/atlas.md
+  cp .atlas/PERSONA.md .claude/agents/atlas.md
 ```
 
 Then run any canary mission from `evals/canary-missions.md` to verify your
@@ -153,7 +153,7 @@ install reaches the ≥80% pass target.
 
 ## Conceptual flow (for implementers)
 
-1. **Mount ATLAS as an agent** in your harness. `agent.md` is ≤1000 tokens
+1. **Mount ATLAS as an agent** in your harness. `PERSONA.md` is ≤1000 tokens
    and belongs in the always-loaded slot.
 2. **Wire the ACI.** Either install [atlas-aci](https://github.com/Rynaro/atlas-aci)
    as an MCP server, or adapt `tools/bounded-aci-spec.md` to your host's
@@ -205,3 +205,17 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+<!-- eiis-v3-package:start -->
+## EIIS v3 package
+
+This repository has the same self-contained package shape as every roster Eidolon:
+
+- `PERSONA.md` — bounded identity, triggers, authority, refusals, and handoffs.
+- `SPEC.md` — the authoritative methodology.
+- `skills/<methodology>/SKILL.md` — unique skill discovery entrypoints.
+- `manifest.json` — immutable package metadata and resource inventory.
+- `install.sh` — package-only installer; the nexus owns vendor adapters.
+
+See [INSTALL.md](INSTALL.md) for nexus and standalone installation.
+<!-- eiis-v3-package:end -->

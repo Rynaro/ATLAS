@@ -13,7 +13,7 @@ metadata:
 
 **Load when:** `map.md` is complete AND the activation trigger below fires.
 This is the operationalized G1 TRANCE form of the diffuse scatter primitives
-already in `skills/locate.md` (Operator pattern) and `agent.md` P0 rule 7.
+already in `skills/locate/SKILL.md` (Operator pattern) and `PERSONA.md` P0 rule 7.
 
 **Unload when:** every sub-question has ≥1 merged finding at confidence ≥ M
 or a `GAP`, and the merged `findings.md` has entered the Phase A fold.
@@ -28,7 +28,7 @@ and never escapes a refusal gate. Branch budgets sum to ≤ the parent budget.
 
 Scatter-Gather is **GATED, never default.** Standard-tier Locate stays serial.
 Both flags MUST hold (cortex C5 + C6). If either is false, the mode is inert
-and you run the serial probe ladder in `skills/locate.md`.
+and you run the serial probe ladder in `skills/locate/SKILL.md`.
 
 | Flag | Source | Threshold |
 |------|--------|-----------|
@@ -54,7 +54,7 @@ In any of these, **do not scatter.** Run serial Locate.
    `graph_query("callgraph_slice: <scope>")` (or, if unavailable, partition by
    `MAP-MODULES` centrality clusters from `map.md`). **Do not LLM-guess the
    clustering** — the partition is a structural fact, not an inference
-   (see `skills/locate.md` Tier-2 graph-first decomposition).
+   (see `skills/locate/SKILL.md` Tier-2 graph-first decomposition).
 2. **One sub-mission per disjoint cluster**, mapped 1:1 to a disjoint
    sub-question where possible.
 3. **Hard cap: 5 branches** (cortex C1; orchestrator-worker sweet spot ~5).
@@ -89,7 +89,7 @@ sub_mission:
   map_excerpt: <ONLY the MAP-MODULES + MAP-GRAPH slice for this cluster>
 ```
 
-Each branch runs the **Tier 1–5 probe ladder** (`skills/locate.md`) within its
+Each branch runs the **Tier 1–5 probe ladder** (`skills/locate/SKILL.md`) within its
 scope and returns **exactly one structured object — no transcript** (I-4):
 
 ```yaml
@@ -125,7 +125,7 @@ on return.
 ### Stage 2 — Fold (reuse existing machinery)
 
 The merged `findings.md` flows **unchanged** into the existing Phase A
-clean-context fold (`skills/abstract.md`). **No new aggregator is built** —
+clean-context fold (`skills/abstract/SKILL.md`). **No new aggregator is built** —
 the AgentFold subagent already aggregates; scatter merely feeds it a merged
 list instead of a serial one.
 
@@ -135,7 +135,7 @@ list instead of a serial one.
 
 Scatter completes when **every sub-question has ≥1 merged finding at
 confidence ≥ M OR a `GAP`.** Scatter does **not** re-spawn: max recursion
-remains 1 (`agent.md` P0 rule 9). A branch that returns only `L`/empty triple
+remains 1 (`PERSONA.md` P0 rule 9). A branch that returns only `L`/empty triple
 records a `GAP`; the parent does not re-scatter that cluster.
 
 ---

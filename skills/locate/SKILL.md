@@ -77,7 +77,7 @@ exact results, where an LLM-authored search is expensive and only
 probabilistically correct.
 
 **Partition derives from the graph, not from a guess.** When the surface is
-large enough to scatter (`skills/scatter.md`), the per-module fan-out partition
+large enough to scatter (`skills/scatter/SKILL.md`), the per-module fan-out partition
 is computed from **one** parent-side `callgraph_slice(scope)` — the disjoint
 clusters are a structural fact. Do **not** LLM-guess the clustering; that
 re-introduces the inference trap the deterministic-first rule exists to avoid.
@@ -125,7 +125,7 @@ serially in your own context. Spawn subagents.
 
 > For a **large surface** (> 5 modules OR > 25 files) with ≥2 disjoint
 > sub-questions, this scatter is formalized as the TRANCE-gated **Scatter-Gather
-> Locate** sub-mode — see `skills/scatter.md` for the both-flags activation
+> Locate** sub-mode — see `skills/scatter/SKILL.md` for the both-flags activation
 > trigger, the 5-branch fan-out cap, the deterministic graph-derived partition,
 > and the merge+dedup contract. Below the threshold (or for a single /
 > tightly-coupled sub-question), stay serial — the heuristics here apply.
