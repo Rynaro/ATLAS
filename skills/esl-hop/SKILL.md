@@ -23,7 +23,7 @@ Load at Phase S (Synthesize), after the fold is validated and before
   one.
 
 If either condition is false, skip this skill silently and emit
-`scout-report.md` the normal way (`skills/synthesize.md`). ESL is opt-in;
+`scout-report.md` the normal way (`skills/synthesize/SKILL.md`). ESL is opt-in;
 ATLAS is EIIS-standalone-conformant and works without it.
 
 ## What counts as change-worthy
@@ -45,7 +45,7 @@ needing a decision or a fix is change-worthy by definition.
 You are the furthest-upstream Eidolon in the ESL chain. You do **not** call
 `mcp__tonberry__*` — right-sizing, opening the `change.json` record, and
 running S→P→E→C→T→R→A belong to **SPECTRA's own hop**
-(`skills/esl-hop.md` in the SPECTRA repo), triggered when it receives your
+(`skills/esl-hop/SKILL.md` in the SPECTRA repo), triggered when it receives your
 hand-off. Your job stops at **naming the change-worthy finding and handing it
 off** — the refusal boundary (P0 rule 1: read-only, no
 `edit`/`write`/`commit`/`deploy`/`migrate`/`refactor`/`fix`) stays fully
@@ -62,14 +62,14 @@ intact: you never create, edit, or transition ESL state yourself.
    word `objective` to name the ESL proposal intent, e.g. `"Deliver scout
    report for mission <id>, proposing an ESL change at 'proposed' for
    FINDING-003/FINDING-007."`. The `ise` block is unchanged from the standard
-   scout-report emission (`skills/synthesize.md` "Envelope sidecar"):
+   scout-report emission (`skills/synthesize/SKILL.md` "Envelope sidecar"):
    `ise.assertion_grade: "self-attested"` and
    `ise.receiver_authorization: {auto_route: true, auto_merge: false,
    auto_deploy: false}` — SPECTRA MAY auto-route the finding into its own ESL
    intake without an operator confirm, but MUST NOT auto-merge or
    auto-deploy anything off an ATLAS-originated discovery.
 3. **hand off via the existing edge.** Deliver `scout-report.md` +
-   `scout-report.envelope.json` to SPECTRA exactly as `skills/synthesize.md`
+   `scout-report.envelope.json` to SPECTRA exactly as `skills/synthesize/SKILL.md`
    already prescribes (`contracts/atlas-to-spectra.yaml`,
    `artifact.kind: scout-report`, unchanged). SPECTRA's `spectra-esl-hop`
    skill (when `.spectra/` and tonberry are present on its side) takes it

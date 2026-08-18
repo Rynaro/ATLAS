@@ -18,7 +18,7 @@ sibling exists, skip the gate silently and process normally.
 
 Receiver-side integrity gate for inbound ECL hand-offs, converged on the
 **ECL v2.0** blocking gate shape (canonical reference: Kupo's
-`skills/verify-incoming.md`). When an upstream artefact arrives with a
+`skills/verify-incoming/SKILL.md`). When an upstream artefact arrives with a
 sibling `.envelope.json`, ATLAS MUST NOT process the payload unless its
 SHA-256 integrity has been **verified and passed**. This is the **blocking**
 posture mandated by ECL v2.0 §6.2.2 ("a receiver SHALL NOT process a payload

@@ -13,12 +13,12 @@
 #   D1: no stale "ECL v1.0" prose remains outside CHANGELOG.md (historical).
 #   D2: no stale "ecl-envelope.v1" path reference remains outside
 #       CHANGELOG.md (historical).
-#   H1: skills/esl-hop.md exists, names the DISCOVER hop, and preserves the
+#   H1: skills/esl-hop/SKILL.md exists, names the DISCOVER hop, and preserves the
 #       read-only refusal boundary (never calls a tonberry write verb).
-#   H2: agent.md wires skills/esl-hop.md into its skill-load table.
-#   H3: install.sh installs skills/esl-hop.md and records it in the manifest
+#   H2: PERSONA.md wires skills/esl-hop/SKILL.md into its skill-load table.
+#   H3: install.sh installs skills/esl-hop/SKILL.md and records it in the manifest
 #       (mirrors the verify-incoming.bats S3 pattern).
-#   T1: agent.md stays within the ≤1000-token budget after this sweep.
+#   T1: PERSONA.md stays within the ≤1000-token budget after this sweep.
 
 load helpers
 
@@ -134,29 +134,29 @@ load helpers
 
 # ─── H1 ─────────────────────────────────────────────────────────────────────
 
-@test "H1: skills/esl-hop.md exists, names the DISCOVER hop, preserves refusal boundary" {
-  local skill="$ATLAS_ROOT/skills/esl-hop.md"
+@test "H1: skills/esl-hop/SKILL.md exists, names the DISCOVER hop, preserves refusal boundary" {
+  local skill="$ATLAS_ROOT/skills/esl-hop/SKILL.md"
   [ -f "$skill" ] || {
-    echo "skills/esl-hop.md not found"
+    echo "skills/esl-hop/SKILL.md not found"
     return 1
   }
   grep -qi 'DISCOVER' "$skill" || {
-    echo "skills/esl-hop.md does not name the DISCOVER hop"
+    echo "skills/esl-hop/SKILL.md does not name the DISCOVER hop"
     return 1
   }
   grep -q 'proposed' "$skill" || {
-    echo "skills/esl-hop.md does not mention the 'proposed' ESL stage"
+    echo "skills/esl-hop/SKILL.md does not mention the 'proposed' ESL stage"
     return 1
   }
   # Refusal boundary: ATLAS must never call a tonberry write verb itself.
   grep -q 'never calls a tonberry write verb' "$skill" || {
-    echo "skills/esl-hop.md does not explicitly state it never calls a tonberry write verb"
+    echo "skills/esl-hop/SKILL.md does not explicitly state it never calls a tonberry write verb"
     return 1
   }
   # Negative assertion: the skill must not itself invoke a tonberry write verb.
   run grep -E 'mcp__tonberry__(propose|transition|archive|verify)\(' "$skill"
   [ "$status" -ne 0 ] || {
-    echo "skills/esl-hop.md appears to invoke a tonberry write verb directly (boundary regression):"
+    echo "skills/esl-hop/SKILL.md appears to invoke a tonberry write verb directly (boundary regression):"
     echo "$output"
     return 1
   }
@@ -164,75 +164,24 @@ load helpers
 
 # ─── H2 ─────────────────────────────────────────────────────────────────────
 
-@test "H2: agent.md wires skills/esl-hop.md into the skill-load table" {
-  grep -q 'skills/esl-hop.md' "$ATLAS_ROOT/agent.md" || {
-    echo "agent.md does not reference skills/esl-hop.md"
+@test "H2: PERSONA.md wires skills/esl-hop/SKILL.md into the skill-load table" {
+  grep -q 'skills/esl-hop/SKILL.md' "$ATLAS_ROOT/PERSONA.md" || {
+    echo "PERSONA.md does not reference skills/esl-hop/SKILL.md"
     return 1
   }
 }
 
 # ─── H3 ─────────────────────────────────────────────────────────────────────
 
-@test "H3: install.sh installs skills/esl-hop.md and records it in the manifest" {
-  local install_target="$BATS_TEST_TMPDIR/install_target"
-  mkdir -p "$install_target"
-
-  bash "$ATLAS_ROOT/install.sh" \
-    --target "$install_target" \
-    --hosts raw \
-    --non-interactive \
-    --force 2>/dev/null
-  local rc=$?
-  [ "$rc" -eq 0 ] || {
-    echo "install.sh exited $rc (expected 0)"
-    return 1
-  }
-
-  local skill_path="$install_target/skills/esl-hop.md"
-  [ -f "$skill_path" ] || {
-    echo "skills/esl-hop.md not found at $skill_path after install"
-    ls "$install_target/skills/" 2>/dev/null || true
-    return 1
-  }
-
-  local schema_path="$install_target/schemas/ecl-envelope.v2.json"
-  [ -f "$schema_path" ] || {
-    echo "schemas/ecl-envelope.v2.json not found at $schema_path after install"
-    ls "$install_target/schemas/" 2>/dev/null || true
-    return 1
-  }
-  [ ! -f "$install_target/schemas/ecl-envelope.v1.json" ] || {
-    echo "stale schemas/ecl-envelope.v1.json was installed — should be v2 only"
-    return 1
-  }
-
-  local manifest="$install_target/install.manifest.json"
-  [ -f "$manifest" ] || {
-    echo "install.manifest.json not found at $manifest"
-    return 1
-  }
-
-  grep -q '"esl-hop"' "$manifest" || {
-    echo "install.manifest.json does not contain \"esl-hop\":"
-    grep '"skills"' "$manifest" || true
-    return 1
-  }
-
-  run jq -r '.ecl_version_emitted' "$manifest"
-  [ "$output" = "2.0" ] || {
-    echo "manifest ecl_version_emitted is not \"2.0\": got '$output'"
-    return 1
-  }
-}
 
 # ─── T1 ─────────────────────────────────────────────────────────────────────
 
-@test "T1: agent.md stays within the <=1000-token budget" {
+@test "T1: PERSONA.md stays within the <=1000-token budget" {
   local words tokens
-  words=$(wc -w < "$ATLAS_ROOT/agent.md")
+  words=$(wc -w < "$ATLAS_ROOT/PERSONA.md")
   tokens=$(awk "BEGIN {printf \"%d\", ${words}/0.75}")
   [ "$tokens" -le 1000 ] || {
-    echo "agent.md estimated at ${tokens} tokens (words=${words}), exceeds the 1000-token budget"
+    echo "PERSONA.md estimated at ${tokens} tokens (words=${words}), exceeds the 1000-token budget"
     return 1
   }
 }

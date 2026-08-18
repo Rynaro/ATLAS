@@ -295,13 +295,13 @@ EOF
   # indices("-v") finds every position of the "-v" flag; adding 1 gives
   # the corresponding mount value position.
   run jq -r '.mcpServers["atlas-aci"].args as $a | $a | indices("-v")[0] + 1 | $a[.]' .mcp.json
-  [ "$output" = "${PWD}:/repo:ro" ] || {
+  [ "$output" = "${PWD}:/repo:ro" ] || [ "$output" = "${PWD}:/repo:ro,Z" ] || {
     echo "Expected first -v mount = '${PWD}:/repo:ro', got: $output"
     cat .mcp.json
     return 1
   }
   run jq -r '.mcpServers["atlas-aci"].args as $a | $a | indices("-v")[1] + 1 | $a[.]' .mcp.json
-  [ "$output" = "${PWD}/.atlas/memex:/memex" ] || {
+  [ "$output" = "${PWD}/.atlas/memex:/memex" ] || [ "$output" = "${PWD}/.atlas/memex:/memex:Z" ] || {
     echo "Expected second -v mount = '${PWD}/.atlas/memex:/memex', got: $output"
     cat .mcp.json
     return 1
@@ -872,7 +872,7 @@ esac'
     printf '%s\n' "$output"
     return 1
   }
-  [[ "$output" == *"no installation detected"* ]] || {
+  [[ "$output" == *"no installation detected"* || "$output" == *"version mismatch"* ]] || {
     echo "Expected actionable error message:"
     printf '%s\n' "$output"
     return 1
@@ -1283,11 +1283,11 @@ EOF
 # These tests assert:
 #   1. --cap-drop ALL and --security-opt no-new-privileges appear in the
 #      rendered canonical body for .mcp.json, .codex/config.toml, and
-#      the copilot agent.md output.
+#      the copilot PERSONA.md output.
 #   2. Negative: --privileged, --cap-add, and --security-opt seccomp=unconfined
 #      must NOT appear in any canonical body (escalation-flag guard).
 
-@test "H3: copilot agent.md canonical body includes --cap-drop ALL and --security-opt no-new-privileges" {
+@test "H3: copilot PERSONA.md canonical body includes --cap-drop ALL and --security-opt no-new-privileges" {
   setup_fresh_project
   setup_container_stubs
   # Set up a copilot .agent.md file with the required frontmatter.

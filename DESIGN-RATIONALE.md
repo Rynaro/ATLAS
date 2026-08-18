@@ -86,7 +86,7 @@ raw excerpts from previous phases and saturates before Synthesize runs. The
 Memex pattern (store-once, reference-by-ID) enables lossless compression:
 the model can re-fetch any excerpt by ID without keeping it in hot context.
 The ≤2000 token working-memory target is chosen so the always-loaded profile
-(agent.md ≤1000 tokens) + working memory (≤2000 tokens) + active skill
+(PERSONA.md ≤1000 tokens) + working memory (≤2000 tokens) + active skill
 (≤200 tokens) fit comfortably within a 4k always-loaded slot.
 
 **Source:** `SPEC.md §1 I-5`, `skills/abstract/SKILL.md`
@@ -106,7 +106,7 @@ the median phase produces ~2000 tokens of new context; 15% of a 32k context
 window is ~4800 tokens, which is sufficient for two median phases plus the
 fold overhead.
 
-**Source:** `SPEC.md §1 I-6`, `agent.md §Telemetry`
+**Source:** `SPEC.md §1 I-6`, `PERSONA.md §Telemetry`
 
 ---
 
@@ -150,16 +150,16 @@ complete. The three-strike halt (I-8 companion: three consecutive
 
 **Decision:** Skills are loaded one at a time, per phase, and unloaded at
 the phase boundary. Phase A (Assess) has no SKILL.md — it runs off the
-always-loaded `agent.md`.
+always-loaded `PERSONA.md`.
 
 **Rationale:** Keeping all four phase skills in context simultaneously
 consumes ~800 tokens of always-loaded budget (4 × ~200 tokens) with no
 benefit — at any given moment only one phase is active. Progressive
-disclosure keeps the always-loaded footprint at `agent.md` + one skill at a
+disclosure keeps the always-loaded footprint at `PERSONA.md` + one skill at a
 time. Phase A deliberately has no skill file so that mission refusal (the
 most critical safety check) cannot be skipped even if a skill fails to load.
 
-**Source:** `agent.md §Progressive disclosure`, `SPEC.md §2`
+**Source:** `PERSONA.md §Progressive disclosure`, `SPEC.md §2`
 
 ---
 
@@ -189,7 +189,7 @@ per-Eidolon profile (ECL §3) provides a typed frontmatter contract
 registry validate ATLAS handoffs without coupling to ATLAS's body schema.
 
 **ISE grade (ECL v2.0 §6.5) — why `self-attested`, not `validated` or
-`unverified`:** ATLAS's exit gate (`skills/synthesize.md`) mechanically checks
+`unverified`:** ATLAS's exit gate (`skills/synthesize/SKILL.md`) mechanically checks
 every claim for a `FINDING-XXX` + `path:line` anchor before a scout report
 ships (I-7) — that is real internal validation, ruling out `unverified`.
 But no other Eidolon or external gate re-checks those claims before the
@@ -226,8 +226,8 @@ three consecutive failures indicates a genuine gap.
 ## Scatter-Gather Locate mode (G1 operationalization)
 
 **Decision:** Promote the diffuse Operator-pattern scatter primitives (I-4;
-`locate.md` Operator section; `agent.md` P0 rule 7) into a *first-class named
-sub-mode* — `skills/scatter.md` + `SPEC.md §2.3.1` — with a both-flags
+`locate.md` Operator section; `PERSONA.md` P0 rule 7) into a *first-class named
+sub-mode* — `skills/scatter/SKILL.md` + `SPEC.md §2.3.1` — with a both-flags
 activation trigger (surface > 5 modules OR > 25 files AND ≥ 2
 topologically-disjoint sub-questions), a hard 5-branch fan-out cap, a
 deterministic graph-derived partition, per-branch budgets summing to ≤ parent,
@@ -256,15 +256,15 @@ routing-kernel concern. Whether a host actually runs branches concurrently is a
 runtime property — on a host without a subagent spawner the mode degrades to
 serial Locate with correctness preserved.
 
-**Source:** `SPEC.md §1 I-4 / §2.3.1`, `skills/scatter.md`,
-`skills/locate.md` (Operator section), `agent.md` P0 rule 7.
+**Source:** `SPEC.md §1 I-4 / §2.3.1`, `skills/scatter/SKILL.md`,
+`skills/locate/SKILL.md` (Operator section), `PERSONA.md` P0 rule 7.
 
 ---
 
 ## Delta re-scout (incremental mode)
 
 **Decision:** Add a read-only, evidence-anchored *delta* re-scout
-(`skills/rescout.md` + `SPEC.md §2.6`): reuse a prior scout-report + Memex store
+(`skills/rescout/SKILL.md` + `SPEC.md §2.6`): reuse a prior scout-report + Memex store
 + a `git diff` range to re-probe ONLY the changed surface, carry unchanged
 findings forward verbatim, and label each finding
 FRESH / UNCHANGED / RE-VERIFIED / NEWLY-STALE with its originating commit.
@@ -284,13 +284,13 @@ index; a true live index is an atlas-aci runtime / nexus integration concern,
 not a methodology property. The spec and skill both state this explicitly so the
 score claim stays evidence-disciplined.
 
-**Source:** `SPEC.md §2.6 / §0 non-goals`, `skills/rescout.md`.
+**Source:** `SPEC.md §2.6 / §0 non-goals`, `skills/rescout/SKILL.md`.
 
 ---
 
 ## Graph-first decomposition (raise η, derive the scatter partition)
 
-**Decision:** Extend the Tier-2 graph-query section of `skills/locate.md` with
+**Decision:** Extend the Tier-2 graph-query section of `skills/locate/SKILL.md` with
 an explicit `graph_query` verb vocabulary (`callers_of`, `implementers_of`,
 `writers_to`, `importers_of`, depth-bounded `transitive_callers`,
 `callgraph_slice`) and prescribe that the Scatter-Gather partition is derived
@@ -303,13 +303,13 @@ partition from the call-graph makes the fan-out plan a *structural fact* instead
 of an inference, which both raises partition quality (truly disjoint clusters →
 low cross-branch dedup) and keeps the deterministic-first discipline intact.
 
-**Source:** `SPEC.md §1 I-3`, `skills/locate.md` (Tier-2), `tools/bounded-aci-spec.md §graph_query`.
+**Source:** `SPEC.md §1 I-3`, `skills/locate/SKILL.md` (Tier-2), `tools/bounded-aci-spec.md §graph_query`.
 
 ---
 
 ## ESL discover hop — propose, never make
 
-**Decision:** Add `skills/esl-hop.md`, ATLAS's opt-in Eidolons Spec Lifecycle
+**Decision:** Add `skills/esl-hop/SKILL.md`, ATLAS's opt-in Eidolons Spec Lifecycle
 (ESL) hop. When a scout mission surfaces a change-worthy finding (a defect, a
 spec/impl drift, or a gap) in an ESL-enabled consumer project (`.spectra/`
 present), Phase S frames the `scout-report.md` + envelope it already emits as
@@ -333,6 +333,6 @@ purely evidentiary: it reuses the artifact and edge it already has (no new
 gains a discovery-to-lifecycle path without acquiring a single new tool, and
 SPECTRA's existing hop needs no change to receive it.
 
-**Source:** `skills/esl-hop.md`, `agent.md` (skill-load table, S phase row),
+**Source:** `skills/esl-hop/SKILL.md`, `PERSONA.md` (skill-load table, S phase row),
 `SPEC.md §6`, `contracts/atlas-to-spectra.yaml` (in `Rynaro/eidolons-ecl`,
 unmodified).

@@ -60,11 +60,11 @@ On phase entry, load the matching skill and unload the previous one:
 | Phase | Skill file | What it governs |
 |-------|------------|----------------|
 | A — Assess | *(inline: `SPEC.md` §2.1 + this file)* | Refuse or accept a mission, fill `mission.md`. |
-| T — Traverse | `skills/traverse.md` | Deterministic structural mapping → `map.md`. |
-| L — Locate | `skills/locate.md` | Bounded probes + scatter subagents → `findings.md`. |
-| A — Abstract | `skills/abstract.md` | AgentFold + Memex → fold summary. |
-| S — Synthesize | `skills/synthesize.md` | Emit `scout-report.md`. |
-| S — ESL discover (opt-in) | `skills/esl-hop.md` | Change-worthy finding + `.spectra/` → propose ESL change → SPECTRA. |
+| T — Traverse | `skills/traverse/SKILL.md` | Deterministic structural mapping → `map.md`. |
+| L — Locate | `skills/locate/SKILL.md` | Bounded probes + scatter subagents → `findings.md`. |
+| A — Abstract | `skills/abstract/SKILL.md` | AgentFold + Memex → fold summary. |
+| S — Synthesize | `skills/synthesize/SKILL.md` | Emit `scout-report.md`. |
+| S — ESL discover (opt-in) | `skills/esl-hop/SKILL.md` | Change-worthy finding + `.spectra/` → propose ESL change → SPECTRA. |
 
 Phase A (Assess) does not have its own SKILL.md by design — it runs off the
 always-loaded context so mission refusal cannot be skipped. Do not keep

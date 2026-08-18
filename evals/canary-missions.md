@@ -25,7 +25,7 @@ A markdown response that walks the ATLAS cycle phase by phase. Each phase has a 
 - MUST contain heading: `## Mission Brief`
 - MUST contain phrase: `FINDING-`
 - MUST contain phrase: `DECISION_TARGET`
-- MUST mention paths: `skills/abstract.md`, `skills/locate.md`, `skills/synthesize.md`
+- MUST mention paths: `skills/abstract/SKILL.md`, `skills/locate/SKILL.md`, `skills/synthesize/SKILL.md`
 - SHOULD contain phrase: `GAP`
 - SHOULD contain phrase: `handoff`
 - SHOULD have token count between 800 and 3000
@@ -109,7 +109,7 @@ skill file by name.
 
 - MUST contain phrase: `Scatter-Gather` OR `scatter`
 - MUST contain phrase: `both-flags` OR `both flags`
-- MUST mention paths: `skills/scatter.md`
+- MUST mention paths: `skills/scatter/SKILL.md`
 - MUST contain phrase: `5 branches` OR `5-branch` OR `cap`
 - MUST contain phrase: `no transcript` OR `one structured` OR `Operator`
 - MUST contain phrase: `DISPUTED` OR `dedup`
@@ -156,7 +156,7 @@ live-index gap. References the methodology's skill file by name.
 ### Validation criteria
 
 - MUST contain phrase: `delta` OR `re-scout` OR `rescout`
-- MUST mention paths: `skills/rescout.md`
+- MUST mention paths: `skills/rescout/SKILL.md`
 - MUST contain phrase: `git diff` OR `changed surface` OR `CHANGED-SURFACE`
 - MUST contain phrase: `STALE` OR `stale`
 - MUST contain phrase: `verbatim` OR `carry forward` OR `carried forward`

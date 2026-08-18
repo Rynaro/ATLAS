@@ -26,7 +26,7 @@ the staleness penalty** by re-probing only changed surfaces — it does **not
 close** the live-index gap. Do not over-claim it.
 
 This mode is read-only (I-1). It reads `git diff` / `git log` via the existing
-deterministic Traverse ladder (`rg` / `git log` in `skills/traverse.md`), never
+deterministic Traverse ladder (`rg` / `git log` in `skills/traverse/SKILL.md`), never
 a write tool. Memory recall and Memex reads are permitted under I-1.
 
 ---
@@ -85,7 +85,7 @@ untouched are **not** re-probed.
 
 ### Step 4 — Re-probe ONLY the stale findings
 
-For each STALE finding, run the `skills/locate.md` Tier 1–5 probe ladder over
+For each STALE finding, run the `skills/locate/SKILL.md` Tier 1–5 probe ladder over
 its anchor, producing an updated finding (new anchor, new confidence). This is
 the only LLM-synthesis-edge work in the mode.
 
@@ -121,7 +121,7 @@ auditable.
 
 The delta re-scout completes when **every prior finding has a delta label**
 and **every changed-surface region** has either a FRESH finding or a `GAP`.
-No re-scatter beyond `agent.md` P0 rule 9 (max recursion = 1).
+No re-scatter beyond `PERSONA.md` P0 rule 9 (max recursion = 1).
 
 ---
 
